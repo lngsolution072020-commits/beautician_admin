@@ -1,0 +1,45 @@
+{
+  "name": "beauticianapp-backend",
+  "version": "1.0.0",
+  "description": "Beautician / Beauty Salon Management System backend",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "lint": "eslint src --ext .js",
+    "seed": "node src/utils/seedSampleData.js",
+    "seed:admin": "node scripts/seedAdmin.js"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "beauty-salon",
+    "backend"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "axios": "^1.7.0",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "express-async-errors": "^3.1.1",
+    "joi": "^17.12.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.0",
+    "morgan": "^1.10.0",
+    "razorpay": "^2.9.0",
+    "socket.io": "^4.8.0",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "nodemon": "^3.1.0"
+  }
+}
+

@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets (never commit)
+.env
+firebase-service-account.json
+*.pem
+
+# Logs and runtime
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
