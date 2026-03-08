@@ -50,10 +50,18 @@ exports.sendOtp = catchAsync(async (req, res) => {
   });
 });
 
-// Verify OTP and login (beautician)
+// Verify OTP and login (or return needsSignup for customer signup flow)
 exports.verifyOtp = catchAsync(async (req, res) => {
-  const { user, tokens } = await authService.verifyOtp(req.body.phone, req.body.otp);
+  const result = await authService.verifyOtp(req.body.phone, req.body.otp);
 
+  if (result.needsSignup) {
+    return ApiResponse.success(res, {
+      message: 'OTP verified. Complete sign up.',
+      data: { needsSignup: true, phone: result.phone }
+    });
+  }
+
+  const { user, tokens } = result;
   return ApiResponse.success(res, {
     message: 'Login successful',
     data: {

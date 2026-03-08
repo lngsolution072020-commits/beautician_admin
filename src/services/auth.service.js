@@ -161,7 +161,8 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
   return true;
 };
 
-// Send OTP to phone (beautician or customer login). If fcmToken provided, OTP is sent via push.
+// Send OTP to phone (beautician or customer). For customer, OTP is sent even if no account (signup flow).
+// If fcmToken provided, OTP is sent via push.
 const sendOtp = async (phone, fcmToken = null, role = 'beautician') => {
   const normalized = normalizePhone(phone);
   if (normalized.length < 10) {
@@ -176,16 +177,17 @@ const sendOtp = async (phone, fcmToken = null, role = 'beautician') => {
     `0${normalized}`,
     normalized.replace(/^0+/, '')
   ].filter(Boolean);
-  const user = await User.findOne({
-    phone: { $in: phoneVariants },
-    role: targetRole,
-    isActive: true
-  });
-  if (!user) {
-    const msg = targetRole === ROLES.BEAUTICIAN
-      ? 'No beautician account found with this number. Please contact your vendor.'
-      : 'No account found with this number. Please sign up first.';
-    throw new ApiError(404, msg);
+
+  // For beautician, require existing account. For customer, send OTP even if no account (then redirect to signup).
+  if (targetRole === ROLES.BEAUTICIAN) {
+    const user = await User.findOne({
+      phone: { $in: phoneVariants },
+      role: targetRole,
+      isActive: true
+    });
+    if (!user) {
+      throw new ApiError(404, 'No beautician account found with this number. Please contact your vendor.');
+    }
   }
 
   const otp = generateOtp();
@@ -210,7 +212,7 @@ const sendOtp = async (phone, fcmToken = null, role = 'beautician') => {
   return { sent: true };
 };
 
-// Verify OTP and login (beautician)
+// Verify OTP and login. If no user exists (e.g. customer signup flow), returns needsSignup + phone.
 const verifyOtp = async (phone, otp) => {
   const normalized = normalizePhone(phone);
   const stored = otpStore.get(normalized);
@@ -238,12 +240,13 @@ const verifyOtp = async (phone, otp) => {
     role: { $in: [ROLES.BEAUTICIAN, ROLES.CUSTOMER] },
     isActive: true
   }).select('-password');
-  if (!user) {
-    throw new ApiError(404, 'User not found');
-  }
 
-  const tokens = generateTokens(user);
-  return { user, tokens };
+  if (user) {
+    const tokens = generateTokens(user);
+    return { user, tokens };
+  }
+  // OTP valid but no account (customer signup flow) – frontend should redirect to signup with this phone
+  return { needsSignup: true, phone: normalized };
 };
 
 module.exports = {

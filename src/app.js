@@ -18,10 +18,10 @@ if (env.nodeEnv !== 'test') {
 }
 
 // API routes
-app.use('/api', routes);
+app.use('/2026/beautician/backend/api', routes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/', (req, res) => {
   res.json({ success: true, message: 'OK' });
 });
 
