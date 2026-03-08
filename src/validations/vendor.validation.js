@@ -18,7 +18,7 @@ const getBeauticians = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional()
+    search: Joi.string().optional().empty('')
   })
 };
 
@@ -42,7 +42,7 @@ const getAppointments = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    status: Joi.string().allow('').optional()
+    status: Joi.string().optional().empty('')
   })
 };
 
@@ -69,7 +69,7 @@ const getInventory = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional()
+    search: Joi.string().optional().empty('')
   })
 };
 
@@ -102,7 +102,7 @@ const earningsQuery = {
 
 const reportsQuery = {
   query: Joi.object({
-    status: Joi.string().allow('').optional()
+    status: Joi.string().optional().empty('')
   })
 };
 

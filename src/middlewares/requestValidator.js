@@ -3,10 +3,24 @@
 
 const ApiError = require('../utils/apiError');
 
+// Strip empty string from query/body so Joi optional() accepts omitted keys
+function stripEmptyStrings(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  Object.keys(obj).forEach((key) => {
+    if (obj[key] === '') {
+      // eslint-disable-next-line no-param-reassign
+      delete obj[key];
+    }
+  });
+}
+
 const validate = (schemas) => (req, res, next) => {
   const sources = ['body', 'params', 'query'];
 
   try {
+    stripEmptyStrings(req.query);
+    stripEmptyStrings(req.body);
+
     sources.forEach((source) => {
       if (schemas[source]) {
         const { error, value } = schemas[source].validate(req[source], {

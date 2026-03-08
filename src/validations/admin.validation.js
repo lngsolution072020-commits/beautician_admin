@@ -28,7 +28,7 @@ const getCities = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional()
+    search: Joi.string().optional().empty('')
   })
 };
 
@@ -48,7 +48,7 @@ const getVendors = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional(),
+    search: Joi.string().optional().empty(''),
     cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional().custom((v) => (v === '' ? undefined : v))
   })
 };
@@ -84,7 +84,7 @@ const getServices = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional()
+    search: Joi.string().optional().empty('')
   })
 };
 
@@ -110,7 +110,7 @@ const getBeauticians = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().allow('').optional(),
+    search: Joi.string().optional().empty(''),
     cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional().custom((v) => (v === '' ? undefined : v))
   })
 };
