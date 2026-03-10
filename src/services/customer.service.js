@@ -2,10 +2,12 @@ const Service = require('../models/Service');
 const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
+const User = require('../models/User');
 const ApiError = require('../utils/apiError');
-const { APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
+const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
+const notificationService = require('./notification.service');
 
 // Services listing for customers
 const getServices = async (query) => {
@@ -38,6 +40,25 @@ const createAppointment = async (customerId, payload) => {
     location: buildPoint(lat, lng),
     price
   });
+
+  // Notify beauticians about new booking (broadcast to all active beauticians with FCM)
+  try {
+    const beauticians = await User.find({ role: ROLES.BEAUTICIAN, isActive: true }).select('_id').lean();
+    await Promise.allSettled(
+      beauticians.map((b) =>
+        notificationService.sendFCM(b._id, {
+          title: 'New booking request',
+          body: `${service.name} booking created. Open app to view details.`,
+          data: {
+            type: 'appointment_created',
+            appointmentId: String(appointment._id)
+          }
+        })
+      )
+    );
+  } catch {
+    // notification failures should not block booking
+  }
 
   return appointment;
 };
