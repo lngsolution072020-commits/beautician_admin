@@ -5,6 +5,7 @@ const adminValidation = require('../validations/admin.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { ROLES } = require('../utils/constants');
+const { upload } = require('../config/multer');
 
 const router = express.Router();
 
@@ -25,9 +26,9 @@ router.put('/vendors/:id', validate(adminValidation.updateVendor), adminControll
 router.delete('/vendors/:id', validate(adminValidation.vendorIdParam), adminController.deleteVendor);
 
 // Services
-router.post('/services', validate(adminValidation.createService), adminController.createService);
+router.post('/services', upload.single('image'), validate(adminValidation.createService), adminController.createService);
 router.get('/services', validate(adminValidation.getServices), adminController.getServices);
-router.put('/services/:id', validate(adminValidation.updateService), adminController.updateService);
+router.put('/services/:id', upload.single('image'), validate(adminValidation.updateService), adminController.updateService);
 router.delete('/services/:id', validate(adminValidation.serviceIdParam), adminController.deleteService);
 
 // Beauticians

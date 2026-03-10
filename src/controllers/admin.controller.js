@@ -80,7 +80,11 @@ exports.deleteVendor = catchAsync(async (req, res) => {
 
 // Services
 exports.createService = catchAsync(async (req, res) => {
-  const service = await adminService.createService(req.body);
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
+  }
+  const service = await adminService.createService(payload);
   return ApiResponse.success(res, {
     message: 'Service created',
     statusCode: 201,
@@ -97,7 +101,11 @@ exports.getServices = catchAsync(async (req, res) => {
 });
 
 exports.updateService = catchAsync(async (req, res) => {
-  const service = await adminService.updateService(req.params.id, req.body);
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
+  }
+  const service = await adminService.updateService(req.params.id, payload);
   return ApiResponse.success(res, {
     message: 'Service updated',
     data: service

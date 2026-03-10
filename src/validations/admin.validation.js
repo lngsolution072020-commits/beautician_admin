@@ -73,6 +73,8 @@ const updateVendor = {
 const createService = {
   body: Joi.object({
     name: Joi.string().min(2).max(100).required(),
+    category: Joi.string().optional(),
+    imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
     basePrice: Joi.number().positive().required(),
     durationMinutes: Joi.number().integer().min(5).required(),
@@ -98,6 +100,8 @@ const updateService = {
   ...serviceIdParam,
   body: Joi.object({
     name: Joi.string().min(2).max(100).optional(),
+    category: Joi.string().optional(),
+    imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
     basePrice: Joi.number().positive().optional(),
     durationMinutes: Joi.number().integer().min(5).optional(),
