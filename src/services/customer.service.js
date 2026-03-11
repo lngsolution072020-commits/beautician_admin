@@ -9,6 +9,19 @@ const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
 const notificationService = require('./notification.service');
 
+// Ensure date fields are valid ISO strings so client never gets "Invalid Date" / Invalid time value
+function sanitizeAppointmentForResponse(doc) {
+  const obj = doc && typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const dateFields = ['scheduledAt', 'createdAt', 'updatedAt', 'startedAt', 'completedAt'];
+  dateFields.forEach((field) => {
+    if (obj[field] != null) {
+      const d = obj[field] instanceof Date ? obj[field] : new Date(obj[field]);
+      obj[field] = Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+    }
+  });
+  return obj;
+}
+
 // Services listing for customers
 const getServices = async (query) => {
   const { page, limit, skip } = getPagination(query);
@@ -25,12 +38,17 @@ const getServices = async (query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
-// Booking
+// Booking – ensure scheduledAt is a valid date to avoid "Invalid time value" on serialization
 const createAppointment = async (customerId, payload) => {
-  const { serviceId, scheduledAt, address, lat, lng, price } = payload;
+  const { serviceId, scheduledAt: rawScheduledAt, address, lat, lng, price } = payload;
 
   const service = await Service.findById(serviceId);
   if (!service) throw new ApiError(404, 'Service not found');
+
+  const scheduledAt = rawScheduledAt instanceof Date ? rawScheduledAt : new Date(rawScheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new ApiError(400, 'Invalid date/time for booking. Please select a valid date and time.');
+  }
 
   const appointment = await Appointment.create({
     customer: customerId,
@@ -60,7 +78,7 @@ const createAppointment = async (customerId, payload) => {
     // notification failures should not block booking
   }
 
-  return appointment;
+  return sanitizeAppointmentForResponse(appointment);
 };
 
 const getAppointments = async (customerId, query) => {
@@ -68,15 +86,17 @@ const getAppointments = async (customerId, query) => {
   const filter = { customer: customerId };
   if (query.status) filter.status = query.status;
 
-  const [items, total] = await Promise.all([
+  const [rawItems, total] = await Promise.all([
     Appointment.find(filter)
       .populate('service beautician')
       .skip(skip)
       .limit(limit)
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: -1 })
+      .lean(),
     Appointment.countDocuments(filter)
   ]);
 
+  const items = rawItems.map((item) => sanitizeAppointmentForResponse(item));
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
@@ -86,7 +106,7 @@ const getAppointmentById = async (customerId, id) => {
   if (String(appt.customer) !== String(customerId)) {
     throw new ApiError(403, 'Forbidden: appointment does not belong to customer');
   }
-  return appt;
+  return sanitizeAppointmentForResponse(appt);
 };
 
 const cancelAppointment = async (customerId, id) => {
@@ -100,7 +120,7 @@ const cancelAppointment = async (customerId, id) => {
   }
   appt.status = APPOINTMENT_STATUS.CANCELLED;
   await appt.save();
-  return appt;
+  return sanitizeAppointmentForResponse(appt);
 };
 
 // Tracking: latest beautician location + ETA placeholder
