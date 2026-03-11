@@ -33,7 +33,14 @@ router.delete('/services/:id', validate(adminValidation.serviceIdParam), adminCo
 
 // Beauticians
 router.get('/beauticians', validate(adminValidation.getBeauticians), adminController.getBeauticians);
+router.get('/beauticians/:id', validate(adminValidation.beauticianIdParam), adminController.getBeauticianById);
+router.put('/beauticians/:id', validate(adminValidation.updateBeautician), adminController.updateBeautician);
 router.post('/beauticians', validate(adminValidation.createBeautician), adminController.createBeautician);
+
+// Users
+router.get('/users', validate(adminValidation.getUsers), adminController.getUsers);
+router.get('/users/:id', validate(adminValidation.userIdParam), adminController.getUserById);
+router.put('/users/:id', validate(adminValidation.updateUser), adminController.updateUser);
 
 // Alerts
 router.get('/alerts', adminController.getAlerts);

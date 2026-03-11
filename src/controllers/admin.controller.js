@@ -138,6 +138,47 @@ exports.createBeautician = catchAsync(async (req, res) => {
   });
 });
 
+exports.getBeauticianById = catchAsync(async (req, res) => {
+  const beautician = await adminService.getBeauticianById(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Beautician details',
+    data: beautician
+  });
+});
+
+exports.updateBeautician = catchAsync(async (req, res) => {
+  const beautician = await adminService.updateBeautician(req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Beautician updated',
+    data: beautician
+  });
+});
+
+// Users
+exports.getUsers = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getUsers(req.query);
+  return ApiResponse.success(res, {
+    message: 'Users fetched',
+    data: { items, meta }
+  });
+});
+
+exports.getUserById = catchAsync(async (req, res) => {
+  const user = await adminService.getUserById(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'User details',
+    data: user
+  });
+});
+
+exports.updateUser = catchAsync(async (req, res) => {
+  const user = await adminService.updateUser(req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'User updated',
+    data: user
+  });
+});
+
 // Alerts
 exports.getAlerts = catchAsync(async (req, res) => {
   const alerts = await adminService.getAlerts();

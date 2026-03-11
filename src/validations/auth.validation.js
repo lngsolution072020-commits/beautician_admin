@@ -54,7 +54,8 @@ const sendOtp = {
 const verifyOtp = {
   body: Joi.object({
     phone: Joi.string().min(10).max(15).required(),
-    otp: Joi.string().length(6).pattern(/^\d+$/).required()
+    otp: Joi.string().length(6).pattern(/^\d+$/).required(),
+    role: Joi.string().valid('beautician', 'customer').optional()
   })
 };
 

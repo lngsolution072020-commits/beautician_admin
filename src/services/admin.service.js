@@ -8,7 +8,7 @@ const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
 const ApiError = require('../utils/apiError');
 const { getPagination, getMeta } = require('../utils/pagination');
-const { ROLES, APPOINTMENT_STATUS } = require('../utils/constants');
+const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 
 // City management
 const createCity = async (payload) => {
@@ -174,6 +174,208 @@ const getBeauticians = async (query) => {
   }).filter(Boolean);
 
   return { items: formatted, meta: getMeta({ page, limit, total: totalCount }) };
+};
+
+const getBeauticianById = async (userId) => {
+  const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN })
+    .select('-password')
+    .populate('city')
+    .populate('vendor')
+    .lean();
+  if (!user) throw new ApiError(404, 'Beautician not found');
+  const profile = await BeauticianProfile.findOne({ user: userId }).populate('vendor').lean();
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+
+  const [totalJobs, earningsResult, inProgressCount, completedToday] = await Promise.all([
+    Appointment.countDocuments({ beautician: userId, status: APPOINTMENT_STATUS.COMPLETED }),
+    Payment.aggregate([
+      { $match: { status: PAYMENT_STATUS.PAID } },
+      { $lookup: { from: 'appointments', localField: 'appointment', foreignField: '_id', as: 'app' } },
+      { $unwind: '$app' },
+      { $match: { 'app.beautician': user._id } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]),
+    Appointment.countDocuments({ beautician: userId, status: APPOINTMENT_STATUS.IN_PROGRESS }),
+    Appointment.countDocuments({
+      beautician: userId,
+      status: APPOINTMENT_STATUS.COMPLETED,
+      completedAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+    })
+  ]);
+
+  const totalEarnings = (earningsResult && earningsResult[0] && earningsResult[0].total) || 0;
+  const cityName = user.city && (typeof user.city === 'object' ? user.city.name : user.city);
+  const vendorName = profile.vendor && (typeof profile.vendor === 'object' ? profile.vendor.name : profile.vendor);
+
+  return {
+    _id: profile._id,
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    phone: user.phone || '',
+    city: cityName || '',
+    cityId: user.city && (user.city._id || user.city).toString(),
+    vendor: vendorName || '',
+    vendorId: profile.vendor && (profile.vendor._id || profile.vendor).toString(),
+    totalJobs,
+    totalEarnings,
+    walletBalance: profile.walletBalance != null ? profile.walletBalance : 0,
+    rating: profile.rating != null ? profile.rating : 0,
+    expertise: profile.expertise || [],
+    experienceYears: profile.experienceYears != null ? profile.experienceYears : 0,
+    isAvailable: profile.isAvailable !== false,
+    inProgressCount,
+    completedToday,
+    isActive: user.isActive !== false,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+};
+
+const updateBeautician = async (userId, payload) => {
+  const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN });
+  if (!user) throw new ApiError(404, 'Beautician not found');
+  const profile = await BeauticianProfile.findOne({ user: userId });
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+
+  if (payload.name !== undefined) user.name = payload.name.trim();
+  if (payload.phone !== undefined) user.phone = payload.phone || '';
+  if (payload.password !== undefined && payload.password.trim()) {
+    user.password = payload.password.trim();
+  }
+  if (payload.isActive !== undefined) user.isActive = payload.isActive;
+
+  if (payload.rating !== undefined) profile.rating = Math.min(5, Math.max(0, Number(payload.rating)));
+  if (payload.walletBalance !== undefined) profile.walletBalance = Math.max(0, Number(payload.walletBalance));
+  if (payload.expertise !== undefined) profile.expertise = Array.isArray(payload.expertise) ? payload.expertise : profile.expertise;
+  if (payload.experienceYears !== undefined) profile.experienceYears = Number(payload.experienceYears);
+  if (payload.isAvailable !== undefined) profile.isAvailable = payload.isAvailable;
+
+  await Promise.all([user.save(), profile.save()]);
+  return getBeauticianById(userId);
+};
+
+// Users (all roles: customer, beautician, etc.)
+const getUsers = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = { role: { $in: [ROLES.CUSTOMER, ROLES.BEAUTICIAN] } };
+  if (query.role) filter.role = query.role;
+  if (query.search) {
+    filter.$or = [
+      { name: { $regex: query.search, $options: 'i' } },
+      { email: { $regex: query.search, $options: 'i' } },
+      { phone: { $regex: String(query.search).replace(/\s/g, ''), $options: 'i' } }
+    ];
+  }
+  const [items, total] = await Promise.all([
+    User.find(filter).select('-password').populate('city').skip(skip).limit(limit).sort({ createdAt: -1 }).lean(),
+    User.countDocuments(filter)
+  ]);
+  const userIds = items.map((u) => u._id);
+  const [beauticianProfiles, completedByCustomer, spentByCustomer, completedByBeautician] = await Promise.all([
+    BeauticianProfile.find({ user: { $in: userIds } }).lean(),
+    Appointment.aggregate([
+      { $match: { customer: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
+      { $group: { _id: '$customer', count: { $sum: 1 } } }
+    ]),
+    Payment.aggregate([
+      { $match: { customer: { $in: userIds }, status: PAYMENT_STATUS.PAID } },
+      { $group: { _id: '$customer', total: { $sum: '$amount' } } }
+    ]),
+    Appointment.aggregate([
+      { $match: { beautician: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
+      { $group: { _id: '$beautician', count: { $sum: 1 } } }
+    ])
+  ]);
+  const profileByUser = Object.fromEntries((beauticianProfiles || []).map((p) => [p.user.toString(), p]));
+  const completedMap = Object.fromEntries((completedByCustomer || []).map((c) => [c._id.toString(), c.count]));
+  const spentMap = Object.fromEntries((spentByCustomer || []).map((s) => [s._id.toString(), s.total]));
+  const beauticianJobsMap = Object.fromEntries((completedByBeautician || []).map((c) => [c._id.toString(), c.count]));
+
+  const formatted = items.map((u) => {
+    const uid = u._id.toString();
+    const profile = profileByUser[uid];
+    const cityName = u.city && (typeof u.city === 'object' ? u.city.name : u.city);
+    return {
+      _id: uid,
+      id: uid,
+      name: u.name,
+      email: u.email,
+      phone: u.phone || '',
+      role: u.role,
+      city: cityName || '',
+      isActive: u.isActive !== false,
+      totalBookings: u.role === ROLES.CUSTOMER ? (completedMap[uid] || 0) : undefined,
+      totalJobs: u.role === ROLES.BEAUTICIAN ? (beauticianJobsMap[uid] || 0) : undefined,
+      totalSpent: u.role === ROLES.CUSTOMER ? (spentMap[uid] || 0) : undefined,
+      rating: profile ? (profile.rating != null ? profile.rating : 0) : undefined,
+      walletBalance: profile ? (profile.walletBalance != null ? profile.walletBalance : 0) : undefined,
+      createdAt: u.createdAt
+    };
+  });
+  return { items: formatted, meta: getMeta({ page, limit, total }) };
+};
+
+const getUserById = async (userId) => {
+  const user = await User.findById(userId).select('-password').populate('city').lean();
+  if (!user) throw new ApiError(404, 'User not found');
+  const uid = user._id.toString();
+  const cityName = user.city && (typeof user.city === 'object' ? user.city.name : user.city);
+
+  if (user.role === ROLES.BEAUTICIAN) {
+    return getBeauticianById(userId);
+  }
+
+  if (user.role === ROLES.CUSTOMER) {
+    const [totalBookings, totalSpentResult] = await Promise.all([
+      Appointment.countDocuments({ customer: userId, status: APPOINTMENT_STATUS.COMPLETED }),
+      Payment.aggregate([
+        { $match: { customer: userId, status: PAYMENT_STATUS.PAID } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
+    ]);
+    const totalSpent = (totalSpentResult && totalSpentResult[0] && totalSpentResult[0].total) || 0;
+    return {
+      id: uid,
+      _id: uid,
+      name: user.name,
+      email: user.email,
+      phone: user.phone || '',
+      role: user.role,
+      city: cityName || '',
+      isActive: user.isActive !== false,
+      totalBookings,
+      totalSpent,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+  }
+
+  return {
+    id: uid,
+    _id: uid,
+    name: user.name,
+    email: user.email,
+    phone: user.phone || '',
+    role: user.role,
+    city: cityName || '',
+    isActive: user.isActive !== false,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+};
+
+const updateUser = async (userId, payload) => {
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(404, 'User not found');
+  if (payload.name !== undefined) user.name = payload.name.trim();
+  if (payload.phone !== undefined) user.phone = payload.phone || '';
+  if (payload.password !== undefined && payload.password.trim()) {
+    user.password = payload.password.trim();
+  }
+  if (payload.isActive !== undefined) user.isActive = payload.isActive;
+  await user.save();
+  return getUserById(userId);
 };
 
 const createBeautician = async (payload) => {
@@ -426,7 +628,12 @@ module.exports = {
   updateService,
   deleteService,
   getBeauticians,
+  getBeauticianById,
+  updateBeautician,
   createBeautician,
+  getUsers,
+  getUserById,
+  updateUser,
   getDashboard,
   getReports,
   getAlerts

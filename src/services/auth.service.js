@@ -213,7 +213,8 @@ const sendOtp = async (phone, fcmToken = null, role = 'beautician') => {
 };
 
 // Verify OTP and login. If no user exists (e.g. customer signup flow), returns needsSignup + phone.
-const verifyOtp = async (phone, otp) => {
+// role: 'customer' | 'beautician' – when provided, only allow login if user matches (so customer app can't log in as beautician and vice versa).
+const verifyOtp = async (phone, otp, role = null) => {
   const normalized = normalizePhone(phone);
   const stored = otpStore.get(normalized);
   if (!stored) {
@@ -242,10 +243,20 @@ const verifyOtp = async (phone, otp) => {
   }).select('-password');
 
   if (user) {
+    const targetRole = role === 'customer' ? ROLES.CUSTOMER : role === 'beautician' ? ROLES.BEAUTICIAN : null;
+    if (targetRole && user.role !== targetRole) {
+      if (user.role === ROLES.BEAUTICIAN) {
+        throw new ApiError(400, 'This number is registered as a beautician. Please sign in using the Beautician app.');
+      }
+      throw new ApiError(400, 'This number is registered as a customer. Please sign in using the Customer app.');
+    }
     const tokens = generateTokens(user);
     return { user, tokens };
   }
-  // OTP valid but no account (customer signup flow) – frontend should redirect to signup with this phone
+  // OTP valid but no account (customer signup flow) – only allow for customer role
+  if (role === 'beautician') {
+    throw new ApiError(404, 'No beautician account found with this number. Please contact your vendor.');
+  }
   return { needsSignup: true, phone: normalized };
 };
 

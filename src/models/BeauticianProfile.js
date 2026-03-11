@@ -29,6 +29,11 @@ const beauticianProfileSchema = new mongoose.Schema(
       max: 5,
       default: 0
     },
+    walletBalance: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     isAvailable: {
       type: Boolean,
       default: true

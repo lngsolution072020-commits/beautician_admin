@@ -52,7 +52,7 @@ exports.sendOtp = catchAsync(async (req, res) => {
 
 // Verify OTP and login (or return needsSignup for customer signup flow)
 exports.verifyOtp = catchAsync(async (req, res) => {
-  const result = await authService.verifyOtp(req.body.phone, req.body.otp);
+  const result = await authService.verifyOtp(req.body.phone, req.body.otp, req.body.role);
 
   if (result.needsSignup) {
     return ApiResponse.success(res, {

@@ -130,6 +130,53 @@ const createBeautician = {
   })
 };
 
+const beauticianIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateBeautician = {
+  ...beauticianIdParam,
+  body: Joi.object({
+    name: Joi.string().min(2).max(100).optional(),
+    phone: Joi.string().optional(),
+    password: Joi.string().min(6).optional(),
+    rating: Joi.number().min(0).max(5).optional(),
+    walletBalance: Joi.number().min(0).optional(),
+    isActive: Joi.boolean().optional(),
+    expertise: Joi.array().items(Joi.string()).optional(),
+    experienceYears: Joi.number().min(0).optional(),
+    isAvailable: Joi.boolean().optional()
+  })
+};
+
+// Users
+const getUsers = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    search: Joi.string().optional().empty(''),
+    role: Joi.string().valid('customer', 'beautician').optional()
+  })
+};
+
+const userIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateUser = {
+  ...userIdParam,
+  body: Joi.object({
+    name: Joi.string().min(2).max(100).optional(),
+    phone: Joi.string().optional(),
+    password: Joi.string().min(6).optional(),
+    isActive: Joi.boolean().optional()
+  })
+};
+
 // Dashboard & Reports
 const getDashboard = {};
 
@@ -153,7 +200,12 @@ module.exports = {
   serviceIdParam,
   updateService,
   getBeauticians,
+  beauticianIdParam,
+  updateBeautician,
   createBeautician,
+  getUsers,
+  userIdParam,
+  updateUser,
   getDashboard,
   getReports
 };
