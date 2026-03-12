@@ -11,6 +11,10 @@ const router = express.Router();
 // All customer routes require customer role
 router.use(authMiddleware, roleMiddleware(ROLES.CUSTOMER));
 
+// Banners & Categories (for home)
+router.get('/banners', customerController.getBanners);
+router.get('/categories', customerController.getCategories);
+
 // Services
 router.get('/services', validate(customerValidation.getServices), customerController.getServices);
 

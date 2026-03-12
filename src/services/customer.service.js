@@ -1,4 +1,6 @@
 const Service = require('../models/Service');
+const Banner = require('../models/Banner');
+const Category = require('../models/Category');
 const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
@@ -22,7 +24,19 @@ function sanitizeAppointmentForResponse(doc) {
   return obj;
 }
 
-// Services listing for customers
+// Banners for customer app (active only)
+const getBanners = async () => {
+  const items = await Banner.find({ isActive: true }).sort({ order: 1, createdAt: -1 }).lean();
+  return { items };
+};
+
+// Categories for customer app (active only)
+const getCategories = async () => {
+  const items = await Category.find({ isActive: true }).sort({ order: 1, createdAt: -1 }).lean();
+  return { items };
+};
+
+// Services listing for customers (with category populated)
 const getServices = async (query) => {
   const { page, limit, skip } = getPagination(query);
   const filter = { isActive: true };
@@ -31,7 +45,7 @@ const getServices = async (query) => {
   }
 
   const [items, total] = await Promise.all([
-    Service.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }),
+    Service.find(filter).populate('category').skip(skip).limit(limit).sort({ createdAt: -1 }),
     Service.countDocuments(filter)
   ]);
 
@@ -213,6 +227,8 @@ const getInvoices = async (customerId, query) => {
 };
 
 module.exports = {
+  getBanners,
+  getCategories,
   getServices,
   createAppointment,
   getAppointments,

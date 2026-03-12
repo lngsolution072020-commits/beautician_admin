@@ -5,7 +5,7 @@ const adminValidation = require('../validations/admin.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { ROLES } = require('../utils/constants');
-const { upload } = require('../config/multer');
+const { upload, uploadBanner, uploadCategory } = require('../config/multer');
 
 const router = express.Router();
 
@@ -24,6 +24,18 @@ router.get('/vendors', validate(adminValidation.getVendors), adminController.get
 router.get('/vendors/:id', validate(adminValidation.vendorIdParam), adminController.getVendorById);
 router.put('/vendors/:id', validate(adminValidation.updateVendor), adminController.updateVendor);
 router.delete('/vendors/:id', validate(adminValidation.vendorIdParam), adminController.deleteVendor);
+
+// Banners
+router.post('/banners', uploadBanner.single('image'), validate(adminValidation.createBanner), adminController.createBanner);
+router.get('/banners', validate(adminValidation.getBanners), adminController.getBanners);
+router.put('/banners/:id', uploadBanner.single('image'), validate(adminValidation.updateBanner), adminController.updateBanner);
+router.delete('/banners/:id', validate(adminValidation.bannerIdParam), adminController.deleteBanner);
+
+// Categories
+router.post('/categories', uploadCategory.single('image'), validate(adminValidation.createCategory), adminController.createCategory);
+router.get('/categories', validate(adminValidation.getCategories), adminController.getCategories);
+router.put('/categories/:id', uploadCategory.single('image'), validate(adminValidation.updateCategory), adminController.updateCategory);
+router.delete('/categories/:id', validate(adminValidation.categoryIdParam), adminController.deleteCategory);
 
 // Services
 router.post('/services', upload.single('image'), validate(adminValidation.createService), adminController.createService);

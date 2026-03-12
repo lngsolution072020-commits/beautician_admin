@@ -69,11 +69,80 @@ const updateVendor = {
   })
 };
 
+// Banners
+const createBanner = {
+  body: Joi.object({
+    title: Joi.string().min(1).max(200).required(),
+    imageUrl: Joi.string().optional(),
+    link: Joi.string().max(500).optional().allow(''),
+    order: Joi.number().integer().min(0).optional(),
+    isActive: Joi.boolean().optional()
+  })
+};
+
+const getBanners = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional()
+  })
+};
+
+const bannerIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateBanner = {
+  ...bannerIdParam,
+  body: Joi.object({
+    title: Joi.string().min(1).max(200).optional(),
+    imageUrl: Joi.string().uri().optional(),
+    link: Joi.string().max(500).optional().allow(''),
+    order: Joi.number().integer().min(0).optional(),
+    isActive: Joi.boolean().optional()
+  })
+};
+
+// Categories
+const createCategory = {
+  body: Joi.object({
+    name: Joi.string().min(1).max(100).required(),
+    imageUrl: Joi.string().uri().optional(),
+    order: Joi.number().integer().min(0).optional(),
+    isActive: Joi.boolean().optional()
+  })
+};
+
+const getCategories = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    search: Joi.string().optional().empty('')
+  })
+};
+
+const categoryIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateCategory = {
+  ...categoryIdParam,
+  body: Joi.object({
+    name: Joi.string().min(1).max(100).optional(),
+    imageUrl: Joi.string().uri().optional(),
+    order: Joi.number().integer().min(0).optional(),
+    isActive: Joi.boolean().optional()
+  })
+};
+
 // Services
 const createService = {
   body: Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    category: Joi.string().optional(),
+    category: Joi.alternatives().try(Joi.string(), objectId()).optional(),
     imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
     basePrice: Joi.number().positive().required(),
@@ -100,7 +169,7 @@ const updateService = {
   ...serviceIdParam,
   body: Joi.object({
     name: Joi.string().min(2).max(100).optional(),
-    category: Joi.string().optional(),
+    category: Joi.alternatives().try(Joi.string(), objectId()).optional(),
     imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
     basePrice: Joi.number().positive().optional(),
@@ -195,6 +264,14 @@ module.exports = {
   getVendors,
   vendorIdParam,
   updateVendor,
+  createBanner,
+  getBanners,
+  bannerIdParam,
+  updateBanner,
+  createCategory,
+  getCategories,
+  categoryIdParam,
+  updateCategory,
   createService,
   getServices,
   serviceIdParam,

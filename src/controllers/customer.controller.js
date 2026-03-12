@@ -2,6 +2,23 @@ const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const customerService = require('../services/customer.service');
 
+// Banners & Categories (for home screen)
+exports.getBanners = catchAsync(async (req, res) => {
+  const { items } = await customerService.getBanners();
+  return ApiResponse.success(res, {
+    message: 'Banners fetched',
+    data: { items }
+  });
+});
+
+exports.getCategories = catchAsync(async (req, res) => {
+  const { items } = await customerService.getCategories();
+  return ApiResponse.success(res, {
+    message: 'Categories fetched',
+    data: { items }
+  });
+});
+
 // Services
 exports.getServices = catchAsync(async (req, res) => {
   const { items, meta } = await customerService.getServices(req.query);

@@ -4,21 +4,24 @@ const multer = require('multer');
 
 const uploadRoot = path.join(process.cwd(), 'uploads');
 const servicesDir = path.join(uploadRoot, 'services');
+const bannersDir = path.join(uploadRoot, 'banners');
+const categoriesDir = path.join(uploadRoot, 'categories');
 
-if (!fs.existsSync(servicesDir)) {
-  fs.mkdirSync(servicesDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, servicesDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    const base = path.basename(file.originalname, ext).replace(/\s+/g, '-').toLowerCase();
-    cb(null, `${base}-${Date.now()}${ext}`);
+[servicesDir, bannersDir, categoriesDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 });
+
+const createStorage = (dir) =>
+  multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, dir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      const base = path.basename(file.originalname, ext).replace(/\s+/g, '-').toLowerCase();
+      cb(null, `${base}-${Date.now()}${ext}`);
+    }
+  });
 
 const fileFilter = (req, file, cb) => {
   if (!file.mimetype.startsWith('image/')) {
@@ -29,14 +32,30 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: createStorage(servicesDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+const uploadBanner = multer({
+  storage: createStorage(bannersDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+const uploadCategory = multer({
+  storage: createStorage(categoriesDir),
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 module.exports = {
   upload,
+  uploadBanner,
+  uploadCategory,
   uploadRoot,
-  servicesDir
+  servicesDir,
+  bannersDir,
+  categoriesDir
 };
 

@@ -78,6 +78,93 @@ exports.deleteVendor = catchAsync(async (req, res) => {
   });
 });
 
+// Banners
+exports.createBanner = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/banners/${req.file.filename}`;
+  }
+  if (!payload.imageUrl) {
+    return ApiResponse.error(res, { statusCode: 400, message: 'Banner image is required (upload a file or provide imageUrl)' });
+  }
+  const banner = await adminService.createBanner(payload);
+  return ApiResponse.success(res, {
+    message: 'Banner created',
+    statusCode: 201,
+    data: banner
+  });
+});
+
+exports.getBanners = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getBanners(req.query);
+  return ApiResponse.success(res, {
+    message: 'Banners fetched',
+    data: { items, meta }
+  });
+});
+
+exports.updateBanner = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/banners/${req.file.filename}`;
+  }
+  const banner = await adminService.updateBanner(req.params.id, payload);
+  return ApiResponse.success(res, {
+    message: 'Banner updated',
+    data: banner
+  });
+});
+
+exports.deleteBanner = catchAsync(async (req, res) => {
+  await adminService.deleteBanner(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Banner deleted',
+    data: {}
+  });
+});
+
+// Categories
+exports.createCategory = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/categories/${req.file.filename}`;
+  }
+  const category = await adminService.createCategory(payload);
+  return ApiResponse.success(res, {
+    message: 'Category created',
+    statusCode: 201,
+    data: category
+  });
+});
+
+exports.getCategories = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getCategories(req.query);
+  return ApiResponse.success(res, {
+    message: 'Categories fetched',
+    data: { items, meta }
+  });
+});
+
+exports.updateCategory = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  if (req.file) {
+    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/categories/${req.file.filename}`;
+  }
+  const category = await adminService.updateCategory(req.params.id, payload);
+  return ApiResponse.success(res, {
+    message: 'Category updated',
+    data: category
+  });
+});
+
+exports.deleteCategory = catchAsync(async (req, res) => {
+  await adminService.deleteCategory(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Category deleted',
+    data: {}
+  });
+});
+
 // Services
 exports.createService = catchAsync(async (req, res) => {
   const payload = { ...req.body };
@@ -105,6 +192,7 @@ exports.updateService = catchAsync(async (req, res) => {
   if (req.file) {
     payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
   }
+  if (payload.category !== undefined && payload.category === '') payload.category = null;
   const service = await adminService.updateService(req.params.id, payload);
   return ApiResponse.success(res, {
     message: 'Service updated',

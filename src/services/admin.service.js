@@ -1,6 +1,8 @@
 const City = require('../models/City');
 const Vendor = require('../models/Vendor');
 const Service = require('../models/Service');
+const Category = require('../models/Category');
+const Banner = require('../models/Banner');
 const User = require('../models/User');
 const BeauticianProfile = require('../models/BeauticianProfile');
 const Appointment = require('../models/Appointment');
@@ -79,8 +81,65 @@ const deleteVendor = async (id) => {
   return true;
 };
 
+// Banner management
+const createBanner = (payload) => Banner.create(payload);
+
+const getBanners = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const [items, total] = await Promise.all([
+    Banner.find({}).sort({ order: 1, createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Banner.countDocuments()
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const updateBanner = async (id, payload) => {
+  const banner = await Banner.findByIdAndUpdate(id, payload, { new: true });
+  if (!banner) throw new ApiError(404, 'Banner not found');
+  return banner;
+};
+
+const deleteBanner = async (id) => {
+  const banner = await Banner.findByIdAndDelete(id);
+  if (!banner) throw new ApiError(404, 'Banner not found');
+  return true;
+};
+
+// Category management
+const createCategory = (payload) => Category.create(payload);
+
+const getCategories = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = {};
+  if (query.search) {
+    filter.name = { $regex: query.search, $options: 'i' };
+  }
+  const [items, total] = await Promise.all([
+    Category.find(filter).sort({ order: 1, createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Category.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const updateCategory = async (id, payload) => {
+  const category = await Category.findByIdAndUpdate(id, payload, { new: true });
+  if (!category) throw new ApiError(404, 'Category not found');
+  return category;
+};
+
+const deleteCategory = async (id) => {
+  const category = await Category.findByIdAndDelete(id);
+  if (!category) throw new ApiError(404, 'Category not found');
+  return true;
+};
+
 // Service management
-const createService = (payload) => Service.create(payload);
+const createService = (payload) => {
+  const { category, ...rest } = payload;
+  const doc = { ...rest };
+  if (category) doc.category = category;
+  return Service.create(doc);
+};
 
 const getServices = async (query) => {
   const { page, limit, skip } = getPagination(query);
@@ -89,7 +148,7 @@ const getServices = async (query) => {
     filter.name = { $regex: query.search, $options: 'i' };
   }
   const [items, total] = await Promise.all([
-    Service.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }),
+    Service.find(filter).populate('category').skip(skip).limit(limit).sort({ createdAt: -1 }),
     Service.countDocuments(filter)
   ]);
   return { items, meta: getMeta({ page, limit, total }) };
@@ -623,6 +682,14 @@ module.exports = {
   getVendorById,
   updateVendor,
   deleteVendor,
+  createBanner,
+  getBanners,
+  updateBanner,
+  deleteBanner,
+  createCategory,
+  getCategories,
+  updateCategory,
+  deleteCategory,
   createService,
   getServices,
   updateService,
