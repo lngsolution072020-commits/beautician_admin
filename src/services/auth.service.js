@@ -68,6 +68,56 @@ const register = async ({ name, email, password, phone, cityId }) => {
   return { user, tokens };
 };
 
+// Self-register a new beautician (will stay inactive until admin approval)
+const registerBeautician = async ({ name, email, password, phone, cityId, vendorId, documents }) => {
+  const existing = await User.findOne({ email });
+  if (existing) {
+    throw new ApiError(400, 'Email already in use');
+  }
+
+  const user = await User.create({
+    name,
+    email,
+    password,
+    phone,
+    role: ROLES.BEAUTICIAN,
+    city: cityId,
+    vendor: vendorId || undefined,
+    isActive: false
+  });
+
+  const profilePayload = {
+    user: user.id
+  };
+  if (vendorId) profilePayload.vendor = vendorId;
+  if (Array.isArray(documents) && documents.length) {
+    profilePayload.documents = documents.map((d) => ({
+      type: d.type || 'other',
+      url: d.url,
+      status: 'pending'
+    }));
+  }
+
+  // Lazily require to avoid circular imports at top-level
+  // eslint-disable-next-line global-require
+  const BeauticianProfile = require('../models/BeauticianProfile');
+  const beauticianProfile = await BeauticianProfile.create(profilePayload);
+
+  user.beauticianProfile = beauticianProfile.id;
+  await user.save();
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      isActive: user.isActive
+    }
+  };
+};
+
 // Authenticate user credentials and issue tokens
 const login = async ({ email, password }) => {
   const user = await User.findOne({ email });
@@ -262,6 +312,7 @@ const verifyOtp = async (phone, otp, role = null) => {
 
 module.exports = {
   register,
+  registerBeautician,
   login,
   refreshToken,
   logout,

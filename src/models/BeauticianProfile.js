@@ -10,8 +10,7 @@ const beauticianProfileSchema = new mongoose.Schema(
     },
     vendor: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Vendor',
-      required: true
+      ref: 'Vendor'
     },
     expertise: [
       {
@@ -37,6 +36,33 @@ const beauticianProfileSchema = new mongoose.Schema(
     isAvailable: {
       type: Boolean,
       default: true
+    },
+    documents: [
+      {
+        type: {
+          type: String,
+          enum: ['aadhar', 'pan', 'license', 'photo', 'other'],
+          default: 'other'
+        },
+        url: {
+          type: String,
+          trim: true
+        },
+        status: {
+          type: String,
+          enum: ['pending', 'approved', 'rejected'],
+          default: 'pending'
+        },
+        notes: {
+          type: String,
+          trim: true
+        }
+      }
+    ],
+    kycStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
     }
   },
   {

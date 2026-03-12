@@ -21,6 +21,17 @@ exports.register = catchAsync(async (req, res) => {
   });
 });
 
+// Self-register beautician (pending admin approval)
+exports.registerBeautician = catchAsync(async (req, res) => {
+  const result = await authService.registerBeautician(req.body);
+
+  return ApiResponse.success(res, {
+    message: 'Beautician registration submitted. Admin will review and approve.',
+    statusCode: 201,
+    data: result
+  });
+});
+
 // Login existing user
 exports.login = catchAsync(async (req, res) => {
   const { user, tokens } = await authService.login(req.body);

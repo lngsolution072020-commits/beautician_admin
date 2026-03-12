@@ -57,6 +57,9 @@ router.put('/users/:id', validate(adminValidation.updateUser), adminController.u
 // Alerts
 router.get('/alerts', adminController.getAlerts);
 
+// Appointments / Orders
+router.get('/appointments', validate(adminValidation.getAppointments), adminController.getAppointments);
+
 // Dashboard & Reports
 router.get('/dashboard', adminController.getDashboard);
 router.get('/reports', validate(adminValidation.getReports), adminController.getReports);

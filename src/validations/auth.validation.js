@@ -10,6 +10,25 @@ const register = {
   })
 };
 
+const registerBeautician = {
+  body: Joi.object({
+    name: Joi.string().min(2).max(100).required(),
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).max(50).required(),
+    phone: Joi.string().optional(),
+    cityId: Joi.string().hex().length(24).optional(),
+    vendorId: Joi.string().hex().length(24).optional(),
+    documents: Joi.array()
+      .items(
+        Joi.object({
+          type: Joi.string().valid('aadhar', 'pan', 'license', 'photo', 'other').optional(),
+          url: Joi.string().uri().required()
+        })
+      )
+      .optional()
+  })
+};
+
 const login = {
   body: Joi.object({
     email: Joi.string().email().required(),
@@ -61,6 +80,7 @@ const verifyOtp = {
 
 module.exports = {
   register,
+  registerBeautician,
   login,
   refreshToken,
   updateProfile,

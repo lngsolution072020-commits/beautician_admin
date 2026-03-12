@@ -256,6 +256,17 @@ const getReports = {
   })
 };
 
+// Appointments / Orders
+const getAppointments = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    status: Joi.string().optional().empty(''),
+    customerId: objectId().optional(),
+    beauticianId: objectId().optional()
+  })
+};
+
 module.exports = {
   createCity,
   updateCity,
@@ -284,6 +295,7 @@ module.exports = {
   userIdParam,
   updateUser,
   getDashboard,
-  getReports
+  getReports,
+  getAppointments
 };
 

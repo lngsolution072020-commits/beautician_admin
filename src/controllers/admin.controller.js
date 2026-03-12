@@ -276,6 +276,15 @@ exports.getAlerts = catchAsync(async (req, res) => {
   });
 });
 
+// Appointments / Orders
+exports.getAppointments = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getAppointments(req.query);
+  return ApiResponse.success(res, {
+    message: 'Appointments fetched',
+    data: { items, meta }
+  });
+});
+
 // Dashboard & Reports
 exports.getDashboard = catchAsync(async (req, res) => {
   const dashboard = await adminService.getDashboard();

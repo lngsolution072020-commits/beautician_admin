@@ -672,6 +672,58 @@ const getReports = async (query) => {
   return { payments };
 };
 
+// Appointments list for admin – show which customer booked which beautician
+const getAppointments = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = {};
+
+  if (query.status) filter.status = query.status;
+  if (query.customerId) filter.customer = query.customerId;
+  if (query.beauticianId) filter.beautician = query.beauticianId;
+
+  const [items, total] = await Promise.all([
+    Appointment.find(filter)
+      .populate('customer beautician service')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .lean(),
+    Appointment.countDocuments(filter)
+  ]);
+
+  const formatted = items.map((a) => {
+    const customer = a.customer || {};
+    const beautician = a.beautician || {};
+    const service = a.service || {};
+
+    return {
+      id: a._id.toString(),
+      status: a.status,
+      price: a.price,
+      scheduledAt: a.scheduledAt,
+      createdAt: a.createdAt,
+      customer: {
+        id: customer._id ? customer._id.toString() : undefined,
+        name: customer.name || '',
+        phone: customer.phone || ''
+      },
+      beautician: beautician._id
+        ? {
+            id: beautician._id.toString(),
+            name: beautician.name || '',
+            phone: beautician.phone || ''
+          }
+        : null,
+      service: {
+        id: service._id ? service._id.toString() : undefined,
+        name: service.name || ''
+      }
+    };
+  });
+
+  return { items: formatted, meta: getMeta({ page, limit, total }) };
+};
+
 module.exports = {
   createCity,
   getCities,
@@ -703,6 +755,7 @@ module.exports = {
   updateUser,
   getDashboard,
   getReports,
-  getAlerts
+  getAlerts,
+  getAppointments
 };
 
