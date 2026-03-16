@@ -20,6 +20,13 @@ const serviceSchema = new mongoose.Schema(
       type: String,
       trim: true
     },
+    includes: [
+      {
+        type: String,
+        trim: true
+      }
+    ],
+    },
     basePrice: {
       type: Number,
       required: true

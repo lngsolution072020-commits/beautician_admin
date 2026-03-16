@@ -145,6 +145,7 @@ const createService = {
     category: Joi.alternatives().try(Joi.string(), objectId()).optional(),
     imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
+    includes: Joi.array().items(Joi.string().min(1).max(200)).optional(),
     basePrice: Joi.number().positive().required(),
     durationMinutes: Joi.number().integer().min(5).required(),
     isActive: Joi.boolean().optional()
@@ -172,6 +173,7 @@ const updateService = {
     category: Joi.alternatives().try(Joi.string(), objectId()).optional(),
     imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
+    includes: Joi.array().items(Joi.string().min(1).max(200)).optional(),
     basePrice: Joi.number().positive().optional(),
     durationMinutes: Joi.number().integer().min(5).optional(),
     isActive: Joi.boolean().optional()
