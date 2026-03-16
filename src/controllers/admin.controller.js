@@ -168,6 +168,14 @@ exports.deleteCategory = catchAsync(async (req, res) => {
 // Services
 exports.createService = catchAsync(async (req, res) => {
   const payload = { ...req.body };
+  if (typeof payload.includes === 'string') {
+    try {
+      const parsed = JSON.parse(payload.includes);
+      if (Array.isArray(parsed)) payload.includes = parsed;
+    } catch {
+      delete payload.includes;
+    }
+  }
   if (req.file) {
     payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
   }
@@ -189,6 +197,14 @@ exports.getServices = catchAsync(async (req, res) => {
 
 exports.updateService = catchAsync(async (req, res) => {
   const payload = { ...req.body };
+  if (typeof payload.includes === 'string') {
+    try {
+      const parsed = JSON.parse(payload.includes);
+      if (Array.isArray(parsed)) payload.includes = parsed;
+    } catch {
+      delete payload.includes;
+    }
+  }
   if (req.file) {
     payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
   }
