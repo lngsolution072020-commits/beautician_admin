@@ -3,13 +3,21 @@ const catchAsync = require('../utils/catchAsync');
 const beauticianService = require('../services/beautician.service');
 const notificationService = require('../services/notification.service');
 const Appointment = require('../models/Appointment');
+const { buildFileUrl } = require('../utils/fileUrl');
 
 // Appointments
 exports.getAppointments = catchAsync(async (req, res) => {
   const { items, meta } = await beauticianService.getAppointments(req.user.id, req.query);
+  const mapped = items.map((appt) => {
+    const obj = appt.toObject ? appt.toObject() : appt;
+    if (obj.service && obj.service.imageUrl && !obj.service.imageUrl.startsWith('http')) {
+      obj.service.imageUrl = buildFileUrl(req, 'services', obj.service.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Beautician appointments fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 

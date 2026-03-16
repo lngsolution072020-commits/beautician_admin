@@ -1,11 +1,7 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const adminService = require('../services/admin.service');
-
-function buildFileUrl(req, folder, filename) {
-  if (!filename) return null;
-  return `${req.protocol}://${req.get('host')}/2026/beautician/backend/uploads/${folder}/${filename}`;
-}
+const { buildFileUrl } = require('../utils/fileUrl');
 
 // Cities
 exports.createCity = catchAsync(async (req, res) => {

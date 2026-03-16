@@ -24,7 +24,8 @@ const getAppointments = async (beauticianId, query) => {
       .populate('customer service')
       .skip(skip)
       .limit(limit)
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: -1 })
+      .lean(),
     Appointment.countDocuments(filter)
   ]);
 

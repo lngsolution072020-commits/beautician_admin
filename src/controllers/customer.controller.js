@@ -1,30 +1,52 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const customerService = require('../services/customer.service');
+const { buildFileUrl } = require('../utils/fileUrl');
 
 // Banners & Categories (for home screen)
 exports.getBanners = catchAsync(async (req, res) => {
   const { items } = await customerService.getBanners();
+  const mapped = items.map((b) => {
+    const obj = b.toObject ? b.toObject() : b;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'banners', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Banners fetched',
-    data: { items }
+    data: { items: mapped }
   });
 });
 
 exports.getCategories = catchAsync(async (req, res) => {
   const { items } = await customerService.getCategories();
+  const mapped = items.map((c) => {
+    const obj = c.toObject ? c.toObject() : c;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'categories', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Categories fetched',
-    data: { items }
+    data: { items: mapped }
   });
 });
 
 // Services
 exports.getServices = catchAsync(async (req, res) => {
   const { items, meta } = await customerService.getServices(req.query);
+  const mapped = items.map((s) => {
+    const obj = s.toObject ? s.toObject() : s;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'services', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Services fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 
