@@ -151,6 +151,12 @@ const createService = {
         Joi.string() // FormData JSON string
       )
       .optional(),
+    experts: Joi.alternatives()
+      .try(
+        Joi.array().items(Joi.string().min(1).max(200)),
+        Joi.string()
+      )
+      .optional(),
     basePrice: Joi.number().positive().required(),
     durationMinutes: Joi.number().integer().min(5).required(),
     isActive: Joi.boolean().optional()
@@ -179,6 +185,12 @@ const updateService = {
     imageUrl: Joi.string().uri().optional(),
     description: Joi.string().optional(),
     includes: Joi.alternatives()
+      .try(
+        Joi.array().items(Joi.string().min(1).max(200)),
+        Joi.string()
+      )
+      .optional(),
+    experts: Joi.alternatives()
       .try(
         Joi.array().items(Joi.string().min(1).max(200)),
         Joi.string()

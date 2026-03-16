@@ -26,6 +26,12 @@ const serviceSchema = new mongoose.Schema(
         trim: true
       }
     ],
+    experts: [
+      {
+        type: String,
+        trim: true
+      }
+    ],
     basePrice: {
       type: Number,
       required: true

@@ -207,6 +207,14 @@ exports.createService = catchAsync(async (req, res) => {
       delete payload.includes;
     }
   }
+  if (typeof payload.experts === 'string') {
+    try {
+      const parsed = JSON.parse(payload.experts);
+      if (Array.isArray(parsed)) payload.experts = parsed;
+    } catch {
+      delete payload.experts;
+    }
+  }
   if (req.file) {
     payload.imageUrl = req.file.filename;
   }
@@ -245,6 +253,14 @@ exports.updateService = catchAsync(async (req, res) => {
       if (Array.isArray(parsed)) payload.includes = parsed;
     } catch {
       delete payload.includes;
+    }
+  }
+  if (typeof payload.experts === 'string') {
+    try {
+      const parsed = JSON.parse(payload.experts);
+      if (Array.isArray(parsed)) payload.experts = parsed;
+    } catch {
+      delete payload.experts;
     }
   }
   if (req.file) {
