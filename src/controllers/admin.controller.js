@@ -2,6 +2,11 @@ const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const adminService = require('../services/admin.service');
 
+function buildFileUrl(req, folder, filename) {
+  if (!filename) return null;
+  return `${req.protocol}://${req.get('host')}/2026/beautician/backend/uploads/${folder}/${filename}`;
+}
+
 // Cities
 exports.createCity = catchAsync(async (req, res) => {
   const city = await adminService.createCity(req.body);
@@ -82,12 +87,16 @@ exports.deleteVendor = catchAsync(async (req, res) => {
 exports.createBanner = catchAsync(async (req, res) => {
   const payload = { ...req.body };
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/banners/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
   if (!payload.imageUrl) {
     return ApiResponse.error(res, { statusCode: 400, message: 'Banner image is required (upload a file or provide imageUrl)' });
   }
-  const banner = await adminService.createBanner(payload);
+  const bannerDoc = await adminService.createBanner(payload);
+  const banner = bannerDoc.toObject ? bannerDoc.toObject() : bannerDoc;
+  if (banner.imageUrl && !banner.imageUrl.startsWith('http')) {
+    banner.imageUrl = buildFileUrl(req, 'banners', banner.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Banner created',
     statusCode: 201,
@@ -97,18 +106,29 @@ exports.createBanner = catchAsync(async (req, res) => {
 
 exports.getBanners = catchAsync(async (req, res) => {
   const { items, meta } = await adminService.getBanners(req.query);
+  const mapped = items.map((b) => {
+    const obj = b.toObject ? b.toObject() : b;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'banners', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Banners fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 
 exports.updateBanner = catchAsync(async (req, res) => {
   const payload = { ...req.body };
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/banners/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
-  const banner = await adminService.updateBanner(req.params.id, payload);
+  const bannerDoc = await adminService.updateBanner(req.params.id, payload);
+  const banner = bannerDoc.toObject ? bannerDoc.toObject() : bannerDoc;
+  if (banner.imageUrl && !banner.imageUrl.startsWith('http')) {
+    banner.imageUrl = buildFileUrl(req, 'banners', banner.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Banner updated',
     data: banner
@@ -127,9 +147,13 @@ exports.deleteBanner = catchAsync(async (req, res) => {
 exports.createCategory = catchAsync(async (req, res) => {
   const payload = { ...req.body };
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/categories/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
-  const category = await adminService.createCategory(payload);
+  const categoryDoc = await adminService.createCategory(payload);
+  const category = categoryDoc.toObject ? categoryDoc.toObject() : categoryDoc;
+  if (category.imageUrl && !category.imageUrl.startsWith('http')) {
+    category.imageUrl = buildFileUrl(req, 'categories', category.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Category created',
     statusCode: 201,
@@ -139,18 +163,29 @@ exports.createCategory = catchAsync(async (req, res) => {
 
 exports.getCategories = catchAsync(async (req, res) => {
   const { items, meta } = await adminService.getCategories(req.query);
+  const mapped = items.map((c) => {
+    const obj = c.toObject ? c.toObject() : c;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'categories', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Categories fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 
 exports.updateCategory = catchAsync(async (req, res) => {
   const payload = { ...req.body };
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/categories/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
-  const category = await adminService.updateCategory(req.params.id, payload);
+  const categoryDoc = await adminService.updateCategory(req.params.id, payload);
+  const category = categoryDoc.toObject ? categoryDoc.toObject() : categoryDoc;
+  if (category.imageUrl && !category.imageUrl.startsWith('http')) {
+    category.imageUrl = buildFileUrl(req, 'categories', category.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Category updated',
     data: category
@@ -177,9 +212,13 @@ exports.createService = catchAsync(async (req, res) => {
     }
   }
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
-  const service = await adminService.createService(payload);
+  const serviceDoc = await adminService.createService(payload);
+  const service = serviceDoc.toObject ? serviceDoc.toObject() : serviceDoc;
+  if (service.imageUrl && !service.imageUrl.startsWith('http')) {
+    service.imageUrl = buildFileUrl(req, 'services', service.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Service created',
     statusCode: 201,
@@ -189,9 +228,16 @@ exports.createService = catchAsync(async (req, res) => {
 
 exports.getServices = catchAsync(async (req, res) => {
   const { items, meta } = await adminService.getServices(req.query);
+  const mapped = items.map((s) => {
+    const obj = s.toObject ? s.toObject() : s;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'services', obj.imageUrl);
+    }
+    return obj;
+  });
   return ApiResponse.success(res, {
     message: 'Services fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 
@@ -206,10 +252,14 @@ exports.updateService = catchAsync(async (req, res) => {
     }
   }
   if (req.file) {
-    payload.imageUrl = `${req.protocol}://${req.get('host')}/uploads/services/${req.file.filename}`;
+    payload.imageUrl = req.file.filename;
   }
   if (payload.category !== undefined && payload.category === '') payload.category = null;
-  const service = await adminService.updateService(req.params.id, payload);
+  const serviceDoc = await adminService.updateService(req.params.id, payload);
+  const service = serviceDoc.toObject ? serviceDoc.toObject() : serviceDoc;
+  if (service.imageUrl && !service.imageUrl.startsWith('http')) {
+    service.imageUrl = buildFileUrl(req, 'services', service.imageUrl);
+  }
   return ApiResponse.success(res, {
     message: 'Service updated',
     data: service

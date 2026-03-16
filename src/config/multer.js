@@ -2,7 +2,10 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 
-const uploadRoot = path.join(process.cwd(), 'uploads');
+// Resolve uploads folder relative to backend root, so it works the same
+// in local dev, SSH (npm run dev) and cPanel/PM2 environments.
+const rootDir = path.resolve(__dirname, '..', '..');
+const uploadRoot = path.join(rootDir, 'uploads');
 const servicesDir = path.join(uploadRoot, 'services');
 const bannersDir = path.join(uploadRoot, 'banners');
 const categoriesDir = path.join(uploadRoot, 'categories');
