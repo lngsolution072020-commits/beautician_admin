@@ -219,6 +219,10 @@ const getBeauticians = async (query) => {
     const uid = u._id.toString();
     const cityName = u.city && (typeof u.city === 'object' ? u.city.name : u.city);
     const vendorName = b.vendor && (typeof b.vendor === 'object' ? b.vendor.name : b.vendor);
+    const isAvailable = b.isAvailable !== false;
+    let status = 'offline';
+    if (busySet.has(uid)) status = 'busy';
+    else if (isAvailable) status = 'online';
     return {
       _id: b._id,
       id: uid,
@@ -229,7 +233,7 @@ const getBeauticians = async (query) => {
       vendorId: b.vendor && b.vendor._id ? b.vendor._id.toString() : '',
       services: completedMap[uid] || 0,
       rating: b.rating != null ? b.rating : 0,
-      status: busySet.has(uid) ? 'busy' : 'offline',
+      status,
       completedToday: todayMap[uid] || 0
     };
   }).filter(Boolean);
