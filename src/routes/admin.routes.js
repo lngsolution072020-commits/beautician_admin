@@ -59,6 +59,8 @@ router.get('/alerts', adminController.getAlerts);
 
 // Appointments / Orders
 router.get('/appointments', validate(adminValidation.getAppointments), adminController.getAppointments);
+router.get('/appointments/:id', validate(adminValidation.appointmentIdParam), adminController.getAppointmentById);
+router.put('/appointments/:id', validate(adminValidation.updateAppointment), adminController.updateAppointment);
 
 // Dashboard & Reports
 router.get('/dashboard', adminController.getDashboard);

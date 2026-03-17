@@ -12,6 +12,27 @@ const buildPoint = (lat, lng) => ({
 });
 
 /**
+ * Haversine distance between two points in km.
+ * Each point: { coordinates: [lng, lat] } or [lng, lat].
+ */
+const getDistanceInKm = (pointA, pointB) => {
+  const coordsA = pointA?.coordinates || pointA;
+  const coordsB = pointB?.coordinates || pointB;
+  if (!coordsA?.length || !coordsB?.length) return null;
+  const [lngA, latA] = coordsA;
+  const [lngB, latB] = coordsB;
+  const R = 6371; // Earth radius km
+  const dLat = ((latB - latA) * Math.PI) / 180;
+  const dLng = ((lngB - lngA) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((latA * Math.PI) / 180) * Math.cos((latB * Math.PI) / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 100) / 100;
+};
+
+/**
  * Placeholder for ETA calculation using Google Maps Distance Matrix API.
  * In production, handle quota limits, error cases and caching.
  */
@@ -51,6 +72,7 @@ const getEtaBetweenPoints = async ({ origin, destination }) => {
 
 module.exports = {
   buildPoint,
-  getEtaBetweenPoints
+  getEtaBetweenPoints,
+  getDistanceInKm
 };
 

@@ -363,6 +363,22 @@ exports.getAppointments = catchAsync(async (req, res) => {
   });
 });
 
+exports.getAppointmentById = catchAsync(async (req, res) => {
+  const appointment = await adminService.getAppointmentById(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Appointment fetched',
+    data: appointment
+  });
+});
+
+exports.updateAppointment = catchAsync(async (req, res) => {
+  const appointment = await adminService.updateAppointment(req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Appointment updated',
+    data: appointment
+  });
+});
+
 // Dashboard & Reports
 exports.getDashboard = catchAsync(async (req, res) => {
   const dashboard = await adminService.getDashboard();

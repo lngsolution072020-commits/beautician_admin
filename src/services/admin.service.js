@@ -11,6 +11,7 @@ const LocationTracking = require('../models/LocationTracking');
 const ApiError = require('../utils/apiError');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
+const { getDistanceInKm } = require('../utils/location');
 
 // City management
 const createCity = async (payload) => {
@@ -672,7 +673,7 @@ const getReports = async (query) => {
   return { payments };
 };
 
-// Appointments list for admin – show which customer booked which beautician
+// Appointments list for admin – show which customer booked which beautician + beautician live distance
 const getAppointments = async (query) => {
   const { page, limit, skip } = getPagination(query);
   const filter = {};
@@ -691,10 +692,30 @@ const getAppointments = async (query) => {
     Appointment.countDocuments(filter)
   ]);
 
+  const beauticianIds = [...new Set(items.map((a) => a.beautician?._id).filter(Boolean))];
+  let lastLocationByBeautician = {};
+  if (beauticianIds.length > 0) {
+    const lastLocations = await LocationTracking.aggregate([
+      { $match: { beautician: { $in: beauticianIds } } },
+      { $sort: { recordedAt: -1 } },
+      { $group: { _id: '$beautician', location: { $first: '$location' } } }
+    ]);
+    lastLocations.forEach((l) => {
+      lastLocationByBeautician[l._id.toString()] = l.location;
+    });
+  }
+
   const formatted = items.map((a) => {
     const customer = a.customer || {};
     const beautician = a.beautician || {};
     const service = a.service || {};
+    let distanceInKm = null;
+    if (beautician._id && a.location?.coordinates?.length >= 2) {
+      const lastLoc = lastLocationByBeautician[beautician._id.toString()];
+      if (lastLoc?.coordinates?.length >= 2) {
+        distanceInKm = getDistanceInKm(a.location, lastLoc);
+      }
+    }
 
     return {
       id: a._id.toString(),
@@ -702,6 +723,7 @@ const getAppointments = async (query) => {
       price: a.price,
       scheduledAt: a.scheduledAt,
       createdAt: a.createdAt,
+      address: a.address,
       customer: {
         id: customer._id ? customer._id.toString() : undefined,
         name: customer.name || '',
@@ -717,11 +739,71 @@ const getAppointments = async (query) => {
       service: {
         id: service._id ? service._id.toString() : undefined,
         name: service.name || ''
-      }
+      },
+      distanceInKm
     };
   });
 
   return { items: formatted, meta: getMeta({ page, limit, total }) };
+};
+
+const getAppointmentById = async (id) => {
+  const appointment = await Appointment.findById(id)
+    .populate('customer beautician service')
+    .lean();
+  if (!appointment) throw new ApiError(404, 'Appointment not found');
+
+  const customer = appointment.customer || {};
+  const beautician = appointment.beautician || {};
+  const service = appointment.service || {};
+  let distanceInKm = null;
+  if (beautician._id && appointment.location?.coordinates?.length >= 2) {
+    const latest = await LocationTracking.findOne({ beautician: beautician._id })
+      .sort({ recordedAt: -1 })
+      .lean();
+    if (latest?.location?.coordinates?.length >= 2) {
+      distanceInKm = getDistanceInKm(appointment.location, latest.location);
+    }
+  }
+
+  return {
+    id: appointment._id.toString(),
+    status: appointment.status,
+    price: appointment.price,
+    scheduledAt: appointment.scheduledAt,
+    createdAt: appointment.createdAt,
+    address: appointment.address,
+    notes: appointment.notes,
+    customer: {
+      id: customer._id?.toString(),
+      name: customer.name || '',
+      phone: customer.phone || '',
+      email: customer.email || ''
+    },
+    beautician: beautician._id
+      ? {
+          id: beautician._id.toString(),
+          name: beautician.name || '',
+          phone: beautician.phone || '',
+          email: beautician.email || ''
+        }
+      : null,
+    service: {
+      id: service._id?.toString(),
+      name: service.name || ''
+    },
+    distanceInKm
+  };
+};
+
+const updateAppointment = async (id, payload) => {
+  const appointment = await Appointment.findById(id);
+  if (!appointment) throw new ApiError(404, 'Appointment not found');
+  if (payload.beautician !== undefined) {
+    appointment.beautician = payload.beautician || null;
+  }
+  await appointment.save();
+  return getAppointmentById(id);
 };
 
 module.exports = {
@@ -756,6 +838,8 @@ module.exports = {
   getDashboard,
   getReports,
   getAlerts,
-  getAppointments
+  getAppointments,
+  getAppointmentById,
+  updateAppointment
 };
 

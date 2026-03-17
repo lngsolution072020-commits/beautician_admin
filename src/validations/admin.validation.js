@@ -291,6 +291,21 @@ const getAppointments = {
   })
 };
 
+const appointmentIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateAppointment = {
+  params: Joi.object({
+    id: objectId().required()
+  }),
+  body: Joi.object({
+    beautician: Joi.alternatives().try(objectId(), Joi.valid(null)).optional()
+  })
+};
+
 module.exports = {
   createCity,
   updateCity,
@@ -320,6 +335,8 @@ module.exports = {
   updateUser,
   getDashboard,
   getReports,
-  getAppointments
+  getAppointments,
+  appointmentIdParam,
+  updateAppointment
 };
 
