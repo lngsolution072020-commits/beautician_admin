@@ -12,6 +12,7 @@ const ApiError = require('../utils/apiError');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { getDistanceInKm } = require('../utils/location');
+const notificationService = require('./notification.service');
 
 // City management
 const createCity = async (payload) => {
@@ -799,10 +800,52 @@ const getAppointmentById = async (id) => {
 const updateAppointment = async (id, payload) => {
   const appointment = await Appointment.findById(id);
   if (!appointment) throw new ApiError(404, 'Appointment not found');
+
+  const previousBeauticianId = appointment.beautician ? appointment.beautician.toString() : null;
+
   if (payload.beautician !== undefined) {
     appointment.beautician = payload.beautician || null;
+
+    // When admin assigns a beautician for a pending booking, mark it as accepted
+    if (appointment.beautician && appointment.status === APPOINTMENT_STATUS.PENDING) {
+      appointment.status = APPOINTMENT_STATUS.ACCEPTED;
+    }
   }
+
   await appointment.save();
+
+  // Notify beautician & customer when beautician assignment actually changes
+  if (appointment.beautician && appointment.beautician.toString() !== previousBeauticianId) {
+    const beauticianId = appointment.beautician;
+    const customerId = appointment.customer;
+
+    // Notify beautician about new job (reuse "appointment_created" type so existing app ringtone works)
+    notificationService
+      .sendFCM(beauticianId, {
+        title: 'New job assigned',
+        body: 'Admin has assigned you a new booking. Open app to view details.',
+        data: {
+          type: 'appointment_created',
+          appointmentId: String(appointment._id)
+        }
+      })
+      .catch(() => {});
+
+    // Notify customer that a beautician has been assigned
+    if (customerId) {
+      notificationService
+        .sendFCM(customerId, {
+          title: 'Beautician assigned',
+          body: 'A beautician has been assigned to your booking.',
+          data: {
+            type: 'appointment_assigned',
+            appointmentId: String(appointment._id)
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
   return getAppointmentById(id);
 };
 
