@@ -28,5 +28,9 @@ router.post('/product-usage', validate(beauticianValidation.productUsage), beaut
 // Availability
 router.post('/availability', validate(beauticianValidation.availability), beauticianController.setAvailability);
 
+// KYC
+router.get('/kyc', beauticianController.getKyc);
+router.post('/kyc', validate(beauticianValidation.submitKyc), beauticianController.submitKyc);
+
 module.exports = router;
 

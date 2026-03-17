@@ -41,7 +41,7 @@ const beauticianProfileSchema = new mongoose.Schema(
       {
         type: {
           type: String,
-          enum: ['aadhar', 'pan', 'license', 'photo', 'other'],
+          enum: ['aadhar', 'pan', 'license', 'photo', 'selfie', 'experience', 'other'],
           default: 'other'
         },
         url: {

@@ -68,8 +68,8 @@ const register = async ({ name, email, password, phone, cityId }) => {
   return { user, tokens };
 };
 
-// Self-register a new beautician (will stay inactive until admin approval)
-const registerBeautician = async ({ name, email, password, phone, cityId, vendorId, documents }) => {
+// Self-register a new beautician (admin will later assign city/vendor and verify KYC)
+const registerBeautician = async ({ name, email, password, phone }) => {
   const existing = await User.findOne({ email });
   if (existing) {
     throw new ApiError(400, 'Email already in use');
@@ -81,22 +81,14 @@ const registerBeautician = async ({ name, email, password, phone, cityId, vendor
     password,
     phone,
     role: ROLES.BEAUTICIAN,
-    city: cityId,
-    vendor: vendorId || undefined,
-    isActive: false
+    // City and vendor will be linked by admin later
+    isActive: true
   });
 
   const profilePayload = {
     user: user.id
+    // vendor and documents will be added/managed later by admin & beautician
   };
-  if (vendorId) profilePayload.vendor = vendorId;
-  if (Array.isArray(documents) && documents.length) {
-    profilePayload.documents = documents.map((d) => ({
-      type: d.type || 'other',
-      url: d.url,
-      status: 'pending'
-    }));
-  }
 
   // Lazily require to avoid circular imports at top-level
   // eslint-disable-next-line global-require

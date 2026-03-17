@@ -136,6 +136,50 @@ const setAvailability = async (beauticianId, isAvailable) => {
   return { isAvailable: profile.isAvailable };
 };
 
+// KYC details for beautician
+const getKyc = async (beauticianId) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianId }).lean();
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+  return {
+    kycStatus: profile.kycStatus || 'pending',
+    documents: (profile.documents || []).map((d) => ({
+      id: d._id.toString(),
+      type: d.type,
+      url: d.url,
+      status: d.status,
+      notes: d.notes || ''
+    }))
+  };
+};
+
+// Submit / re-submit KYC documents from beautician app
+const submitKyc = async (beauticianId, documents) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianId });
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+
+  const docs = Array.isArray(documents) ? documents : [];
+  docs.forEach((doc) => {
+    if (!doc || !doc.url || !doc.type) return;
+    const existing = profile.documents.find((d) => d.type === doc.type);
+    if (existing) {
+      existing.url = doc.url;
+      existing.status = 'pending';
+      existing.notes = '';
+    } else {
+      profile.documents.push({
+        type: doc.type,
+        url: doc.url,
+        status: 'pending'
+      });
+    }
+  });
+
+  profile.kycStatus = 'pending';
+  await profile.save();
+
+  return getKyc(beauticianId);
+};
+
 module.exports = {
   getAppointments,
   acceptAppointment,
@@ -145,6 +189,8 @@ module.exports = {
   updateLocation,
   getLocationHistory,
   recordProductUsage,
-  setAvailability
+  setAvailability,
+  getKyc,
+  submitKyc
 };
 

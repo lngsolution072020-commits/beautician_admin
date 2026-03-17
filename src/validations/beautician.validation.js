@@ -49,12 +49,28 @@ const availability = {
   })
 };
 
+// KYC submit
+const submitKyc = {
+  body: Joi.object({
+    documents: Joi.array()
+      .items(
+        Joi.object({
+          type: Joi.string().valid('aadhar', 'pan', 'license', 'photo', 'selfie', 'experience', 'other').required(),
+          url: Joi.string().uri().required()
+        })
+      )
+      .min(1)
+      .required()
+  })
+};
+
 module.exports = {
   getAppointments,
   appointmentIdParam,
   updateLocation,
   locationHistory,
   productUsage,
-  availability
+  availability,
+  submitKyc
 };
 

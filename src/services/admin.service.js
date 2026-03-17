@@ -289,6 +289,14 @@ const getBeauticianById = async (userId) => {
     expertise: profile.expertise || [],
     experienceYears: profile.experienceYears != null ? profile.experienceYears : 0,
     isAvailable: profile.isAvailable !== false,
+    kycStatus: profile.kycStatus || 'pending',
+    documents: (profile.documents || []).map((d) => ({
+      id: d._id.toString(),
+      type: d.type,
+      url: d.url,
+      status: d.status,
+      notes: d.notes || ''
+    })),
     inProgressCount,
     completedToday,
     isActive: user.isActive !== false,
@@ -315,6 +323,17 @@ const updateBeautician = async (userId, payload) => {
   if (payload.expertise !== undefined) profile.expertise = Array.isArray(payload.expertise) ? payload.expertise : profile.expertise;
   if (payload.experienceYears !== undefined) profile.experienceYears = Number(payload.experienceYears);
   if (payload.isAvailable !== undefined) profile.isAvailable = payload.isAvailable;
+
+  if (payload.kycStatus !== undefined) profile.kycStatus = payload.kycStatus;
+  if (Array.isArray(payload.documents)) {
+    payload.documents.forEach((docUpdate) => {
+      if (!docUpdate || !docUpdate.id) return;
+      const existing = profile.documents.id(docUpdate.id);
+      if (!existing) return;
+      if (docUpdate.status !== undefined) existing.status = docUpdate.status;
+      if (docUpdate.notes !== undefined) existing.notes = docUpdate.notes;
+    });
+  }
 
   await Promise.all([user.save(), profile.save()]);
   return getBeauticianById(userId);

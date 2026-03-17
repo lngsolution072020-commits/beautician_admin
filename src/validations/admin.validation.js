@@ -240,7 +240,17 @@ const updateBeautician = {
     isActive: Joi.boolean().optional(),
     expertise: Joi.array().items(Joi.string()).optional(),
     experienceYears: Joi.number().min(0).optional(),
-    isAvailable: Joi.boolean().optional()
+    isAvailable: Joi.boolean().optional(),
+    kycStatus: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+    documents: Joi.array()
+      .items(
+        Joi.object({
+          id: objectId().required(),
+          status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+          notes: Joi.string().allow('').optional()
+        })
+      )
+      .optional()
   })
 };
 

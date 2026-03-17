@@ -114,3 +114,21 @@ exports.setAvailability = catchAsync(async (req, res) => {
   });
 });
 
+// KYC – get current status & documents
+exports.getKyc = catchAsync(async (req, res) => {
+  const data = await beauticianService.getKyc(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'KYC status',
+    data
+  });
+});
+
+// KYC – submit / re-submit documents
+exports.submitKyc = catchAsync(async (req, res) => {
+  const data = await beauticianService.submitKyc(req.user.id, req.body.documents);
+  return ApiResponse.success(res, {
+    message: 'KYC submitted',
+    data
+  });
+});
+
