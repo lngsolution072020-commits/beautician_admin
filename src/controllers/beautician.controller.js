@@ -104,3 +104,13 @@ exports.recordProductUsage = catchAsync(async (req, res) => {
   });
 });
 
+// Availability
+exports.setAvailability = catchAsync(async (req, res) => {
+  const { isAvailable } = req.body;
+  const result = await beauticianService.setAvailability(req.user.id, isAvailable);
+  return ApiResponse.success(res, {
+    message: 'Availability updated',
+    data: result
+  });
+});
+

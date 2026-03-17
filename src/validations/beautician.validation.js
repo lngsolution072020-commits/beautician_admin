@@ -42,11 +42,19 @@ const productUsage = {
   })
 };
 
+// Availability
+const availability = {
+  body: Joi.object({
+    isAvailable: Joi.boolean().required()
+  })
+};
+
 module.exports = {
   getAppointments,
   appointmentIdParam,
   updateLocation,
   locationHistory,
-  productUsage
+  productUsage,
+  availability
 };
 

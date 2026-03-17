@@ -25,5 +25,8 @@ router.get('/location/history', validate(beauticianValidation.locationHistory), 
 // Product usage
 router.post('/product-usage', validate(beauticianValidation.productUsage), beauticianController.recordProductUsage);
 
+// Availability
+router.post('/availability', validate(beauticianValidation.availability), beauticianController.setAvailability);
+
 module.exports = router;
 

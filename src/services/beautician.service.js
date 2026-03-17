@@ -1,6 +1,7 @@
 const Appointment = require('../models/Appointment');
 const LocationTracking = require('../models/LocationTracking');
 const Inventory = require('../models/Inventory');
+const BeauticianProfile = require('../models/BeauticianProfile');
 const ApiError = require('../utils/apiError');
 const { APPOINTMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
@@ -126,6 +127,15 @@ const recordProductUsage = async (beauticianId, { inventoryItemId, quantityUsed 
   return item;
 };
 
+// Availability toggle (used by beautician app)
+const setAvailability = async (beauticianId, isAvailable) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianId });
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+  profile.isAvailable = !!isAvailable;
+  await profile.save();
+  return { isAvailable: profile.isAvailable };
+};
+
 module.exports = {
   getAppointments,
   acceptAppointment,
@@ -134,6 +144,7 @@ module.exports = {
   completeAppointment,
   updateLocation,
   getLocationHistory,
-  recordProductUsage
+  recordProductUsage,
+  setAvailability
 };
 
