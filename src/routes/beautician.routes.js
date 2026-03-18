@@ -5,6 +5,7 @@ const beauticianValidation = require('../validations/beautician.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { ROLES } = require('../utils/constants');
+const { uploadKyc } = require('../config/multer');
 
 const router = express.Router();
 
@@ -31,6 +32,15 @@ router.post('/availability', validate(beauticianValidation.availability), beauti
 // KYC
 router.get('/kyc', beauticianController.getKyc);
 router.post('/kyc', validate(beauticianValidation.submitKyc), beauticianController.submitKyc);
+router.post(
+  '/kyc/upload',
+  uploadKyc.fields([
+    { name: 'aadhar', maxCount: 1 },
+    { name: 'selfie', maxCount: 1 },
+    { name: 'experience', maxCount: 1 }
+  ]),
+  beauticianController.uploadKycFiles
+);
 
 module.exports = router;
 

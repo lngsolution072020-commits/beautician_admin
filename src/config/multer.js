@@ -9,8 +9,9 @@ const uploadRoot = path.join(rootDir, 'uploads');
 const servicesDir = path.join(uploadRoot, 'services');
 const bannersDir = path.join(uploadRoot, 'banners');
 const categoriesDir = path.join(uploadRoot, 'categories');
+const kycDir = path.join(uploadRoot, 'kyc');
 
-[servicesDir, bannersDir, categoriesDir].forEach((dir) => {
+[servicesDir, bannersDir, categoriesDir, kycDir].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -52,6 +53,12 @@ const uploadCategory = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
+const uploadKyc = multer({
+  storage: createStorage(kycDir),
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
 module.exports = {
   upload,
   uploadBanner,
@@ -59,6 +66,8 @@ module.exports = {
   uploadRoot,
   servicesDir,
   bannersDir,
-  categoriesDir
+  categoriesDir,
+  uploadKyc,
+  kycDir
 };
 

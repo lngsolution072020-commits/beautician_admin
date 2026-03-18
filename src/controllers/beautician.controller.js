@@ -132,3 +132,26 @@ exports.submitKyc = catchAsync(async (req, res) => {
   });
 });
 
+// KYC – upload files and return document URLs
+exports.uploadKycFiles = catchAsync(async (req, res) => {
+  const files = req.files || {};
+  const documents = [];
+
+  const pushDoc = (field, type) => {
+    if (Array.isArray(files[field]) && files[field][0]) {
+      const file = files[field][0];
+      const url = buildFileUrl(req, 'kyc', file.filename);
+      documents.push({ type, url });
+    }
+  };
+
+  pushDoc('aadhar', 'aadhar');
+  pushDoc('selfie', 'selfie');
+  pushDoc('experience', 'experience');
+
+  return ApiResponse.success(res, {
+    message: 'KYC files uploaded',
+    data: { documents }
+  });
+});
+
