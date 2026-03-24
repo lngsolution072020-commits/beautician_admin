@@ -83,8 +83,6 @@ const createAppointment = async (customerId, payload) => {
     if (bal < price) {
       throw new ApiError(400, 'Insufficient wallet balance');
     }
-    profile.walletBalance = bal - price;
-    await profile.save();
   }
 
   const appointment = await Appointment.create({
@@ -96,6 +94,23 @@ const createAppointment = async (customerId, payload) => {
     price,
     paymentMode
   });
+
+  if (paymentMode === 'wallet') {
+    const profile = await CustomerProfile.findOne({ user: customerId });
+    if (!profile) {
+      appointment.status = APPOINTMENT_STATUS.CANCELLED;
+      await appointment.save();
+      throw new ApiError(400, 'Customer profile not found');
+    }
+    const bal = profile.walletBalance != null ? profile.walletBalance : 0;
+    if (bal < price) {
+      appointment.status = APPOINTMENT_STATUS.CANCELLED;
+      await appointment.save();
+      throw new ApiError(400, 'Insufficient wallet balance');
+    }
+    profile.walletBalance = bal - price;
+    await profile.save();
+  }
 
   // Try to auto-assign an available beautician and notify them
   try {
