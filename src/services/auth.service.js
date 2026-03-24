@@ -302,6 +302,24 @@ const verifyOtp = async (phone, otp, role = null) => {
   return { needsSignup: true, phone: normalized };
 };
 
+// Soft-delete customer account after password confirmation (customer app only)
+const deleteAccount = async (userId, { password }) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  if (user.role !== ROLES.CUSTOMER) {
+    throw new ApiError(403, 'This action is only available for customer accounts');
+  }
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) {
+    throw new ApiError(400, 'Invalid password');
+  }
+  user.isActive = false;
+  await user.save();
+  return true;
+};
+
 module.exports = {
   register,
   registerBeautician,
@@ -311,6 +329,7 @@ module.exports = {
   getProfile,
   updateProfile,
   changePassword,
+  deleteAccount,
   updateFcmToken,
   sendOtp,
   verifyOtp

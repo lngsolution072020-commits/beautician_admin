@@ -19,6 +19,7 @@ router.post('/logout', authMiddleware, authController.logout);
 router.get('/profile', authMiddleware, authController.getProfile);
 router.put('/update-profile', authMiddleware, validate(authValidation.updateProfile), authController.updateProfile);
 router.post('/change-password', authMiddleware, validate(authValidation.changePassword), authController.changePassword);
+router.post('/delete-account', authMiddleware, validate(authValidation.deleteAccount), authController.deleteAccount);
 router.post('/fcm-token', authMiddleware, validate(authValidation.fcmToken), authController.updateFcmToken);
 
 module.exports = router;

@@ -146,6 +146,16 @@ exports.changePassword = catchAsync(async (req, res) => {
   });
 });
 
+// Delete account (customer, soft-delete)
+exports.deleteAccount = catchAsync(async (req, res) => {
+  await authService.deleteAccount(req.user.id, req.body);
+
+  return ApiResponse.success(res, {
+    message: 'Account deleted',
+    data: {}
+  });
+});
+
 // Register FCM token for push notifications
 exports.updateFcmToken = catchAsync(async (req, res) => {
   await authService.updateFcmToken(req.user.id, req.body.token);

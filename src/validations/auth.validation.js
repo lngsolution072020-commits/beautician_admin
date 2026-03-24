@@ -47,6 +47,12 @@ const changePassword = {
   })
 };
 
+const deleteAccount = {
+  body: Joi.object({
+    password: Joi.string().min(6).max(50).required()
+  })
+};
+
 const fcmToken = {
   body: Joi.object({
     token: Joi.string().min(10).required()
@@ -76,6 +82,7 @@ module.exports = {
   refreshToken,
   updateProfile,
   changePassword,
+  deleteAccount,
   fcmToken,
   sendOtp,
   verifyOtp
