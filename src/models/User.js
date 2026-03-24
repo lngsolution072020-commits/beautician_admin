@@ -53,6 +53,12 @@ const userSchema = new mongoose.Schema(
     fcmToken: {
       type: String,
       default: null
+    },
+    /** Stored filename under uploads/profiles (see auth profile-image upload) */
+    profileImage: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   {

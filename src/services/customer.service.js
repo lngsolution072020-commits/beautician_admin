@@ -8,6 +8,7 @@ const LocationTracking = require('../models/LocationTracking');
 const CustomerProfile = require('../models/CustomerProfile');
 const razorpayService = require('./razorpay.service');
 const BeauticianProfile = require('../models/BeauticianProfile');
+const User = require('../models/User');
 const ApiError = require('../utils/apiError');
 const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
@@ -420,6 +421,44 @@ const getInvoices = async (customerId, query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
+const getBeauticianSummaryForCustomer = async (customerId, beauticianUserId) => {
+  const shared = await Appointment.findOne({
+    customer: customerId,
+    beautician: beauticianUserId
+  })
+    .select('_id')
+    .lean();
+  if (!shared) {
+    throw new ApiError(403, 'You have no bookings with this beautician');
+  }
+
+  const beauticianUser = await User.findOne({
+    _id: beauticianUserId,
+    role: ROLES.BEAUTICIAN,
+    isActive: true
+  })
+    .select('name phone profileImage')
+    .lean();
+  if (!beauticianUser) throw new ApiError(404, 'Beautician not found');
+
+  const profile = await BeauticianProfile.findOne({ user: beauticianUserId }).lean();
+  const servicesCompleted = await Appointment.countDocuments({
+    beautician: beauticianUserId,
+    status: APPOINTMENT_STATUS.COMPLETED
+  });
+
+  return {
+    id: beauticianUser._id.toString(),
+    name: beauticianUser.name,
+    phone: beauticianUser.phone || '',
+    profileImage: beauticianUser.profileImage || '',
+    rating: profile?.rating != null ? profile.rating : 0,
+    experienceYears: profile?.experienceYears != null ? profile.experienceYears : 0,
+    expertise: profile?.expertise || [],
+    servicesCompleted
+  };
+};
+
 const getPendingRatingsForCustomer = async (customerId) => {
   const items = await Appointment.find({
     customer: customerId,
@@ -466,6 +505,7 @@ module.exports = {
   getServices,
   getServiceById,
   createAppointment,
+  getBeauticianSummaryForCustomer,
   getAppointments,
   getAppointmentById,
   cancelAppointment,

@@ -17,6 +17,12 @@ const serviceIdParam = {
   })
 };
 
+const beauticianUserIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
 // Booking
 const createAppointment = {
   body: Joi.object({
@@ -94,6 +100,7 @@ const rateAppointment = {
 module.exports = {
   getServices,
   serviceIdParam,
+  beauticianUserIdParam,
   createAppointment,
   getAppointments,
   appointmentIdParam,

@@ -314,6 +314,19 @@ const verifyOtp = async (phone, otp, role = null) => {
 };
 
 // Soft-delete customer account after password confirmation (customer app only)
+const setProfileImage = async (userId, filename) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+  if (![ROLES.CUSTOMER, ROLES.BEAUTICIAN].includes(user.role)) {
+    throw new ApiError(403, 'Profile photo is only for customer or beautician accounts');
+  }
+  user.profileImage = filename;
+  await user.save();
+  return User.findById(userId).select('-password').lean();
+};
+
 const deleteAccount = async (userId, { password }) => {
   const user = await User.findById(userId);
   if (!user) {
@@ -374,6 +387,7 @@ module.exports = {
   refreshToken,
   logout,
   getProfile,
+  setProfileImage,
   updateProfile,
   changePassword,
   deleteAccount,

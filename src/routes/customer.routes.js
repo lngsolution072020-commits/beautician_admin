@@ -15,6 +15,12 @@ router.use(authMiddleware, roleMiddleware(ROLES.CUSTOMER));
 router.get('/banners', customerController.getBanners);
 router.get('/categories', customerController.getCategories);
 
+router.get(
+  '/beauticians/:id/summary',
+  validate(customerValidation.beauticianUserIdParam),
+  customerController.getBeauticianSummary
+);
+
 // Services
 router.get('/services', validate(customerValidation.getServices), customerController.getServices);
 router.get('/services/:id', validate(customerValidation.serviceIdParam), customerController.getServiceById);

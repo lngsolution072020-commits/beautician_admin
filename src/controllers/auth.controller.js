@@ -1,5 +1,7 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
+const ApiError = require('../utils/apiError');
+const { attachProfileImageUrl } = require('../utils/profileImage');
 const authService = require('../services/auth.service');
 
 // Register new customer
@@ -119,20 +121,35 @@ exports.logout = catchAsync(async (req, res) => {
 // Get profile
 exports.getProfile = catchAsync(async (req, res) => {
   const user = await authService.getProfile(req.user.id);
+  const data = attachProfileImageUrl(req, user);
 
   return ApiResponse.success(res, {
     message: 'Profile fetched',
-    data: user
+    data
+  });
+});
+
+exports.uploadProfileImage = catchAsync(async (req, res) => {
+  if (!req.file?.filename) {
+    throw new ApiError(400, 'Image file is required (field name: image)');
+  }
+  const user = await authService.setProfileImage(req.user.id, req.file.filename);
+  const data = attachProfileImageUrl(req, user);
+
+  return ApiResponse.success(res, {
+    message: 'Profile photo updated',
+    data
   });
 });
 
 // Update profile
 exports.updateProfile = catchAsync(async (req, res) => {
   const user = await authService.updateProfile(req.user.id, req.body);
+  const data = attachProfileImageUrl(req, user);
 
   return ApiResponse.success(res, {
     message: 'Profile updated',
-    data: user
+    data
   });
 });
 

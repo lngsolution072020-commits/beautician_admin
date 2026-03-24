@@ -3,6 +3,7 @@ const authController = require('../controllers/auth.controller');
 const validate = require('../middlewares/requestValidator');
 const authValidation = require('../validations/auth.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { uploadProfile } = require('../config/multer');
 
 const router = express.Router();
 
@@ -19,6 +20,12 @@ router.post('/refresh-token', validate(authValidation.refreshToken), authControl
 // Authenticated routes
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/profile', authMiddleware, authController.getProfile);
+router.post(
+  '/profile-image',
+  authMiddleware,
+  uploadProfile.single('image'),
+  authController.uploadProfileImage
+);
 router.put('/update-profile', authMiddleware, validate(authValidation.updateProfile), authController.updateProfile);
 router.post('/change-password', authMiddleware, validate(authValidation.changePassword), authController.changePassword);
 router.post('/delete-account', authMiddleware, validate(authValidation.deleteAccount), authController.deleteAccount);

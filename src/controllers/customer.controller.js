@@ -19,6 +19,19 @@ exports.getBanners = catchAsync(async (req, res) => {
   });
 });
 
+function attachBeauticianProfileImageUrl(req, item) {
+  if (!item || !item.beautician) return item;
+  const b = item.beautician;
+  const img = b.profileImage;
+  if (img && String(img).trim() && !String(img).startsWith('http')) {
+    return {
+      ...item,
+      beautician: { ...b, profileImageUrl: buildFileUrl(req, 'profiles', img) }
+    };
+  }
+  return item;
+}
+
 exports.getCategories = catchAsync(async (req, res) => {
   const { items } = await customerService.getCategories();
   const mapped = items.map((c) => {
@@ -74,9 +87,10 @@ exports.createAppointment = catchAsync(async (req, res) => {
 
 exports.getAppointments = catchAsync(async (req, res) => {
   const { items, meta } = await customerService.getAppointments(req.user.id, req.query);
+  const mapped = items.map((row) => attachBeauticianProfileImageUrl(req, row));
   return ApiResponse.success(res, {
     message: 'Customer appointments fetched',
-    data: { items, meta }
+    data: { items: mapped, meta }
   });
 });
 
@@ -84,7 +98,19 @@ exports.getAppointmentById = catchAsync(async (req, res) => {
   const appt = await customerService.getAppointmentById(req.user.id, req.params.id);
   return ApiResponse.success(res, {
     message: 'Appointment fetched',
-    data: appt
+    data: attachBeauticianProfileImageUrl(req, appt)
+  });
+});
+
+exports.getBeauticianSummary = catchAsync(async (req, res) => {
+  const summary = await customerService.getBeauticianSummaryForCustomer(req.user.id, req.params.id);
+  const profileImageUrl =
+    summary.profileImage && String(summary.profileImage).trim()
+      ? buildFileUrl(req, 'profiles', summary.profileImage)
+      : null;
+  return ApiResponse.success(res, {
+    message: 'Beautician profile',
+    data: { ...summary, profileImageUrl }
   });
 });
 
