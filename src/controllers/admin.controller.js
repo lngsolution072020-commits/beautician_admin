@@ -354,6 +354,22 @@ exports.getAlerts = catchAsync(async (req, res) => {
   });
 });
 
+exports.getPayments = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getPayments(req.query);
+  return ApiResponse.success(res, {
+    message: 'Payments fetched',
+    data: { items, meta }
+  });
+});
+
+exports.getBeauticianLiveLocation = catchAsync(async (req, res) => {
+  const data = await adminService.getBeauticianLiveLocation(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Beautician live location fetched',
+    data
+  });
+});
+
 // Appointments / Orders
 exports.getAppointments = catchAsync(async (req, res) => {
   const { items, meta } = await adminService.getAppointments(req.query);

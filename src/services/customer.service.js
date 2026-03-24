@@ -5,6 +5,7 @@ const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
 const User = require('../models/User');
+const BeauticianProfile = require('../models/BeauticianProfile');
 const ApiError = require('../utils/apiError');
 const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
@@ -21,6 +22,9 @@ function sanitizeAppointmentForResponse(doc) {
       obj[field] = Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
     }
   });
+  if (obj.paymentMode != null && obj.paymentMode !== '') {
+    obj.paymentMode = String(obj.paymentMode).trim().toLowerCase();
+  }
   return obj;
 }
 
@@ -52,9 +56,15 @@ const getServices = async (query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
+const getServiceById = async (id) => {
+  const service = await Service.findOne({ _id: id, isActive: true }).populate('category').lean();
+  if (!service) throw new ApiError(404, 'Service not found');
+  return service;
+};
+
 // Booking – ensure scheduledAt is a valid date to avoid "Invalid time value" on serialization
 const createAppointment = async (customerId, payload) => {
-  const { serviceId, scheduledAt: rawScheduledAt, address, lat, lng, price } = payload;
+  const { serviceId, scheduledAt: rawScheduledAt, address, lat, lng, price, paymentMode = 'online' } = payload;
 
   const service = await Service.findById(serviceId);
   if (!service) throw new ApiError(404, 'Service not found');
@@ -70,26 +80,29 @@ const createAppointment = async (customerId, payload) => {
     scheduledAt,
     address,
     location: buildPoint(lat, lng),
-    price
+    price,
+    paymentMode
   });
 
-  // Notify beauticians about new booking (broadcast to all active beauticians with FCM)
+  // Try to auto-assign an available beautician and notify them
   try {
-    const beauticians = await User.find({ role: ROLES.BEAUTICIAN, isActive: true }).select('_id').lean();
-    await Promise.allSettled(
-      beauticians.map((b) =>
-        notificationService.sendFCM(b._id, {
-          title: 'New booking request',
-          body: `${service.name} booking created. Open app to view details.`,
-          data: {
-            type: 'appointment_created',
-            appointmentId: String(appointment._id)
-          }
-        })
-      )
-    );
+    // Pick any available beautician profile (could be enhanced with city / distance logic)
+    const profile = await BeauticianProfile.findOne({ isAvailable: true }).populate('user');
+    if (profile && profile.user && profile.user.isActive) {
+      appointment.beautician = profile.user._id;
+      await appointment.save();
+
+      await notificationService.sendFCM(profile.user._id, {
+        title: 'New booking request',
+        body: `${service.name} booking created. Open app to view details.`,
+        data: {
+          type: 'appointment_created',
+          appointmentId: String(appointment._id)
+        }
+      });
+    }
   } catch {
-    // notification failures should not block booking
+    // notification failures or auto-assignment issues should not block booking
   }
 
   return sanitizeAppointmentForResponse(appointment);
@@ -110,7 +123,24 @@ const getAppointments = async (customerId, query) => {
     Appointment.countDocuments(filter)
   ]);
 
-  const items = rawItems.map((item) => sanitizeAppointmentForResponse(item));
+  const items = await Promise.all(
+    rawItems.map(async (item) => {
+      const sanitized = sanitizeAppointmentForResponse(item);
+      if (sanitized.beautician && sanitized.beautician._id) {
+        const [servicesCompleted, profile] = await Promise.all([
+          Appointment.countDocuments({ beautician: sanitized.beautician._id, status: APPOINTMENT_STATUS.COMPLETED }),
+          BeauticianProfile.findOne({ user: sanitized.beautician._id }).lean()
+        ]);
+        sanitized.beautician = {
+          ...sanitized.beautician,
+          servicesCompleted,
+          rating: profile?.rating || 4.5,
+          experienceYears: profile?.experienceYears || 0
+        };
+      }
+      return sanitized;
+    })
+  );
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
@@ -120,7 +150,20 @@ const getAppointmentById = async (customerId, id) => {
   if (String(appt.customer) !== String(customerId)) {
     throw new ApiError(403, 'Forbidden: appointment does not belong to customer');
   }
-  return sanitizeAppointmentForResponse(appt);
+  const sanitized = sanitizeAppointmentForResponse(appt);
+  if (sanitized.beautician && sanitized.beautician._id) {
+    const [servicesCompleted, profile] = await Promise.all([
+      Appointment.countDocuments({ beautician: sanitized.beautician._id, status: APPOINTMENT_STATUS.COMPLETED }),
+      BeauticianProfile.findOne({ user: sanitized.beautician._id }).lean()
+    ]);
+    sanitized.beautician = {
+      ...sanitized.beautician,
+      servicesCompleted,
+      rating: profile?.rating || 4.5,
+      experienceYears: profile?.experienceYears || 0
+    };
+  }
+  return sanitized;
 };
 
 const cancelAppointment = async (customerId, id) => {
@@ -230,6 +273,7 @@ module.exports = {
   getBanners,
   getCategories,
   getServices,
+  getServiceById,
   createAppointment,
   getAppointments,
   getAppointmentById,

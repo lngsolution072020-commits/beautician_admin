@@ -241,6 +241,8 @@ const updateBeautician = {
     expertise: Joi.array().items(Joi.string()).optional(),
     experienceYears: Joi.number().min(0).optional(),
     isAvailable: Joi.boolean().optional(),
+    cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional(),
+    vendorId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional(),
     kycStatus: Joi.string().valid('pending', 'approved', 'rejected').optional(),
     documents: Joi.array()
       .items(
@@ -287,6 +289,14 @@ const getReports = {
   query: Joi.object({
     from: Joi.date().iso().optional(),
     to: Joi.date().iso().optional()
+  })
+};
+
+const getPayments = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    status: Joi.string().valid('pending', 'paid', 'failed', 'refunded').optional().empty('')
   })
 };
 
@@ -345,6 +355,7 @@ module.exports = {
   updateUser,
   getDashboard,
   getReports,
+  getPayments,
   getAppointments,
   appointmentIdParam,
   updateAppointment

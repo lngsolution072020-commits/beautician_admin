@@ -54,6 +54,11 @@ const appointmentSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
+    paymentMode: {
+      type: String,
+      enum: ['online', 'cod', 'wallet'],
+      default: 'online'
+    },
     startedAt: Date,
     completedAt: Date
   },

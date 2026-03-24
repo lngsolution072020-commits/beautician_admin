@@ -17,6 +17,7 @@ router.get('/categories', customerController.getCategories);
 
 // Services
 router.get('/services', validate(customerValidation.getServices), customerController.getServices);
+router.get('/services/:id', validate(customerValidation.serviceIdParam), customerController.getServiceById);
 
 // Booking
 router.post('/appointments', validate(customerValidation.createAppointment), customerController.createAppointment);

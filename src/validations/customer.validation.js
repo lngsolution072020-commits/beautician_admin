@@ -11,6 +11,12 @@ const getServices = {
   })
 };
 
+const serviceIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
 // Booking
 const createAppointment = {
   body: Joi.object({
@@ -19,7 +25,8 @@ const createAppointment = {
     address: Joi.string().min(5).max(500).required(),
     lat: Joi.number().min(-90).max(90).required(),
     lng: Joi.number().min(-180).max(180).required(),
-    price: Joi.number().positive().required()
+    price: Joi.number().positive().required(),
+    paymentMode: Joi.string().valid('online', 'cod', 'wallet').optional()
   })
 };
 
@@ -70,6 +77,7 @@ const getInvoices = {
 
 module.exports = {
   getServices,
+  serviceIdParam,
   createAppointment,
   getAppointments,
   appointmentIdParam,

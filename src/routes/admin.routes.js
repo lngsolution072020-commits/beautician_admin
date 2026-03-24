@@ -46,6 +46,7 @@ router.delete('/services/:id', validate(adminValidation.serviceIdParam), adminCo
 // Beauticians
 router.get('/beauticians', validate(adminValidation.getBeauticians), adminController.getBeauticians);
 router.get('/beauticians/:id', validate(adminValidation.beauticianIdParam), adminController.getBeauticianById);
+router.get('/beauticians/:id/live-location', validate(adminValidation.beauticianIdParam), adminController.getBeauticianLiveLocation);
 router.put('/beauticians/:id', validate(adminValidation.updateBeautician), adminController.updateBeautician);
 router.post('/beauticians', validate(adminValidation.createBeautician), adminController.createBeautician);
 
@@ -56,6 +57,7 @@ router.put('/users/:id', validate(adminValidation.updateUser), adminController.u
 
 // Alerts
 router.get('/alerts', adminController.getAlerts);
+router.get('/payments', validate(adminValidation.getPayments), adminController.getPayments);
 
 // Appointments / Orders
 router.get('/appointments', validate(adminValidation.getAppointments), adminController.getAppointments);

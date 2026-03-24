@@ -50,6 +50,18 @@ exports.getServices = catchAsync(async (req, res) => {
   });
 });
 
+exports.getServiceById = catchAsync(async (req, res) => {
+  const service = await customerService.getServiceById(req.params.id);
+  const obj = service.toObject ? service.toObject() : { ...service };
+  if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+    obj.imageUrl = buildFileUrl(req, 'services', obj.imageUrl);
+  }
+  return ApiResponse.success(res, {
+    message: 'Service fetched',
+    data: obj
+  });
+});
+
 // Booking
 exports.createAppointment = catchAsync(async (req, res) => {
   const appt = await customerService.createAppointment(req.user.id, req.body);

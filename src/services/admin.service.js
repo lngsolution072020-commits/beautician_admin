@@ -253,12 +253,9 @@ const getBeauticianById = async (userId) => {
 
   const [totalJobs, earningsResult, inProgressCount, completedToday] = await Promise.all([
     Appointment.countDocuments({ beautician: userId, status: APPOINTMENT_STATUS.COMPLETED }),
-    Payment.aggregate([
-      { $match: { status: PAYMENT_STATUS.PAID } },
-      { $lookup: { from: 'appointments', localField: 'appointment', foreignField: '_id', as: 'app' } },
-      { $unwind: '$app' },
-      { $match: { 'app.beautician': user._id } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
+    Appointment.aggregate([
+      { $match: { beautician: user._id, status: APPOINTMENT_STATUS.COMPLETED } },
+      { $group: { _id: null, total: { $sum: '$price' } } }
     ]),
     Appointment.countDocuments({ beautician: userId, status: APPOINTMENT_STATUS.IN_PROGRESS }),
     Appointment.countDocuments({
@@ -317,12 +314,14 @@ const updateBeautician = async (userId, payload) => {
     user.password = payload.password.trim();
   }
   if (payload.isActive !== undefined) user.isActive = payload.isActive;
+  if (payload.cityId !== undefined) user.city = payload.cityId || undefined;
 
   if (payload.rating !== undefined) profile.rating = Math.min(5, Math.max(0, Number(payload.rating)));
   if (payload.walletBalance !== undefined) profile.walletBalance = Math.max(0, Number(payload.walletBalance));
   if (payload.expertise !== undefined) profile.expertise = Array.isArray(payload.expertise) ? payload.expertise : profile.expertise;
   if (payload.experienceYears !== undefined) profile.experienceYears = Number(payload.experienceYears);
   if (payload.isAvailable !== undefined) profile.isAvailable = payload.isAvailable;
+  if (payload.vendorId !== undefined) profile.vendor = payload.vendorId || undefined;
 
   if (payload.kycStatus !== undefined) profile.kycStatus = payload.kycStatus;
   if (Array.isArray(payload.documents)) {
@@ -356,15 +355,25 @@ const getUsers = async (query) => {
     User.countDocuments(filter)
   ]);
   const userIds = items.map((u) => u._id);
-  const [beauticianProfiles, completedByCustomer, spentByCustomer, completedByBeautician] = await Promise.all([
+  const [beauticianProfiles, bookingsByCustomer, spentByCustomer, completedByBeautician] = await Promise.all([
     BeauticianProfile.find({ user: { $in: userIds } }).lean(),
     Appointment.aggregate([
-      { $match: { customer: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
+      {
+        $match: {
+          customer: { $in: userIds },
+          status: { $nin: [APPOINTMENT_STATUS.CANCELLED, APPOINTMENT_STATUS.REJECTED] }
+        }
+      },
       { $group: { _id: '$customer', count: { $sum: 1 } } }
     ]),
-    Payment.aggregate([
-      { $match: { customer: { $in: userIds }, status: PAYMENT_STATUS.PAID } },
-      { $group: { _id: '$customer', total: { $sum: '$amount' } } }
+    Appointment.aggregate([
+      {
+        $match: {
+          customer: { $in: userIds },
+          status: APPOINTMENT_STATUS.COMPLETED
+        }
+      },
+      { $group: { _id: '$customer', total: { $sum: '$price' } } }
     ]),
     Appointment.aggregate([
       { $match: { beautician: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
@@ -372,7 +381,7 @@ const getUsers = async (query) => {
     ])
   ]);
   const profileByUser = Object.fromEntries((beauticianProfiles || []).map((p) => [p.user.toString(), p]));
-  const completedMap = Object.fromEntries((completedByCustomer || []).map((c) => [c._id.toString(), c.count]));
+  const bookingsMap = Object.fromEntries((bookingsByCustomer || []).map((c) => [c._id.toString(), c.count]));
   const spentMap = Object.fromEntries((spentByCustomer || []).map((s) => [s._id.toString(), s.total]));
   const beauticianJobsMap = Object.fromEntries((completedByBeautician || []).map((c) => [c._id.toString(), c.count]));
 
@@ -389,7 +398,7 @@ const getUsers = async (query) => {
       role: u.role,
       city: cityName || '',
       isActive: u.isActive !== false,
-      totalBookings: u.role === ROLES.CUSTOMER ? (completedMap[uid] || 0) : undefined,
+      totalBookings: u.role === ROLES.CUSTOMER ? (bookingsMap[uid] || 0) : undefined,
       totalJobs: u.role === ROLES.BEAUTICIAN ? (beauticianJobsMap[uid] || 0) : undefined,
       totalSpent: u.role === ROLES.CUSTOMER ? (spentMap[uid] || 0) : undefined,
       rating: profile ? (profile.rating != null ? profile.rating : 0) : undefined,
@@ -412,10 +421,13 @@ const getUserById = async (userId) => {
 
   if (user.role === ROLES.CUSTOMER) {
     const [totalBookings, totalSpentResult] = await Promise.all([
-      Appointment.countDocuments({ customer: userId, status: APPOINTMENT_STATUS.COMPLETED }),
-      Payment.aggregate([
-        { $match: { customer: userId, status: PAYMENT_STATUS.PAID } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
+      Appointment.countDocuments({
+        customer: userId,
+        status: { $nin: [APPOINTMENT_STATUS.CANCELLED, APPOINTMENT_STATUS.REJECTED] }
+      }),
+      Appointment.aggregate([
+        { $match: { customer: user._id, status: APPOINTMENT_STATUS.COMPLETED } },
+        { $group: { _id: null, total: { $sum: '$price' } } }
       ])
     ]);
     const totalSpent = (totalSpentResult && totalSpentResult[0] && totalSpentResult[0].total) || 0;
@@ -680,7 +692,11 @@ const getReports = async (query) => {
   if (query.from || query.to) {
     match.createdAt = {};
     if (query.from) match.createdAt.$gte = new Date(query.from);
-    if (query.to) match.createdAt.$lte = new Date(query.to);
+    if (query.to) {
+      const toDate = new Date(query.to);
+      toDate.setHours(23, 59, 59, 999);
+      match.createdAt.$lte = toDate;
+    }
   }
 
   const payments = await Payment.aggregate([
@@ -695,6 +711,63 @@ const getReports = async (query) => {
   ]);
 
   return { payments };
+};
+
+const getBeauticianLiveLocation = async (userId) => {
+  const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN }).populate('city').lean();
+  if (!user) throw new ApiError(404, 'Beautician not found');
+
+  const latest = await LocationTracking.findOne({ beautician: user._id })
+    .sort({ recordedAt: -1 })
+    .lean();
+  if (!latest || !latest.location?.coordinates || latest.location.coordinates.length < 2) {
+    return null;
+  }
+
+  const [lng, lat] = latest.location.coordinates;
+  return {
+    id: user._id.toString(),
+    name: user.name,
+    status: 'online',
+    city: user.city?.name || '',
+    lat,
+    lng,
+    recordedAt: latest.recordedAt
+  };
+};
+
+const getPayments = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = {};
+  if (query.status) filter.status = query.status;
+  const [items, total] = await Promise.all([
+    Payment.find(filter)
+      .populate('customer', 'name phone')
+      .populate({
+        path: 'appointment',
+        populate: [
+          { path: 'beautician', select: 'name phone' },
+          { path: 'vendor', select: 'name' }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Payment.countDocuments(filter)
+  ]);
+  const mapped = items.map((p) => ({
+    id: p._id.toString(),
+    amount: p.amount || 0,
+    status: p.status,
+    customerName: p.customer?.name || '',
+    beauticianName: p.appointment?.beautician?.name || '',
+    vendorName: p.appointment?.vendor?.name || '',
+    providerOrderId: p.providerOrderId || '',
+    providerPaymentId: p.providerPaymentId || '',
+    createdAt: p.createdAt
+  }));
+  return { items: mapped, meta: getMeta({ page, limit, total }) };
 };
 
 // Appointments list for admin – show which customer booked which beautician + beautician live distance
@@ -904,6 +977,8 @@ module.exports = {
   getDashboard,
   getReports,
   getAlerts,
+  getPayments,
+  getBeauticianLiveLocation,
   getAppointments,
   getAppointmentById,
   updateAppointment
