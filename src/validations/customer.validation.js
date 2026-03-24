@@ -81,6 +81,16 @@ const getInvoices = {
   })
 };
 
+const rateAppointment = {
+  params: Joi.object({
+    id: objectId().required()
+  }),
+  body: Joi.object({
+    stars: Joi.number().integer().min(1).max(5).required(),
+    comment: Joi.string().max(500).allow('', null).optional()
+  })
+};
+
 module.exports = {
   getServices,
   serviceIdParam,
@@ -92,6 +102,7 @@ module.exports = {
   initiatePayment,
   initiateWalletRecharge,
   verifyPayment,
-  getInvoices
+  getInvoices,
+  rateAppointment
 };
 

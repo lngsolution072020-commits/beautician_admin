@@ -13,6 +13,7 @@ const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constant
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
 const notificationService = require('./notification.service');
+const appointmentRatingService = require('./appointmentRating.service');
 
 // Ensure date fields are valid ISO strings so client never gets "Invalid Date" / Invalid time value
 function sanitizeAppointmentForResponse(doc) {
@@ -74,6 +75,14 @@ const createAppointment = async (customerId, payload) => {
   const scheduledAt = rawScheduledAt instanceof Date ? rawScheduledAt : new Date(rawScheduledAt);
   if (Number.isNaN(scheduledAt.getTime())) {
     throw new ApiError(400, 'Invalid date/time for booking. Please select a valid date and time.');
+  }
+
+  const pendingRatings = await appointmentRatingService.countPendingCustomerRatings(customerId);
+  if (pendingRatings > 0) {
+    throw new ApiError(
+      400,
+      'Please rate your beautician for completed services before booking again.'
+    );
   }
 
   if (paymentMode === 'wallet') {
@@ -411,6 +420,46 @@ const getInvoices = async (customerId, query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
+const getPendingRatingsForCustomer = async (customerId) => {
+  const items = await Appointment.find({
+    customer: customerId,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    'ratingFromCustomer.stars': { $exists: false }
+  })
+    .populate('beautician', 'name')
+    .populate('service', 'name')
+    .sort({ completedAt: -1 })
+    .lean();
+
+  return { items };
+};
+
+const submitCustomerRating = async (customerId, appointmentId, { stars, comment }) => {
+  const appt = await Appointment.findById(appointmentId);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  if (String(appt.customer) !== String(customerId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  if (appt.status !== APPOINTMENT_STATUS.COMPLETED) {
+    throw new ApiError(400, 'You can rate only after the service is completed');
+  }
+  if (appt.ratingFromCustomer && appt.ratingFromCustomer.stars != null) {
+    throw new ApiError(400, 'You have already submitted a rating');
+  }
+  const s = Math.min(5, Math.max(1, Math.round(Number(stars))));
+  if (!Number.isFinite(s)) throw new ApiError(400, 'Invalid rating');
+  appt.ratingFromCustomer = {
+    stars: s,
+    comment: comment ? String(comment).trim().slice(0, 500) : '',
+    createdAt: new Date()
+  };
+  await appt.save();
+  if (appt.beautician) {
+    await appointmentRatingService.recalculateBeauticianAverageRating(appt.beautician);
+  }
+  return sanitizeAppointmentForResponse(appt);
+};
+
 module.exports = {
   getBanners,
   getCategories,
@@ -421,6 +470,8 @@ module.exports = {
   getAppointmentById,
   cancelAppointment,
   trackAppointment,
+  getPendingRatingsForCustomer,
+  submitCustomerRating,
   initiatePayment,
   initiateWalletRecharge,
   verifyPayment,

@@ -20,6 +20,18 @@ const customerProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    /** Average rating from beauticians (updated when beautician submits rating) */
+    rating: {
+      type: Number,
+      min: 0,
+      max: 5,
+      default: 0
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   {

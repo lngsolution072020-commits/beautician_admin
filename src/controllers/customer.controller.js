@@ -96,6 +96,22 @@ exports.cancelAppointment = catchAsync(async (req, res) => {
   });
 });
 
+exports.getPendingRatings = catchAsync(async (req, res) => {
+  const data = await customerService.getPendingRatingsForCustomer(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Pending ratings',
+    data
+  });
+});
+
+exports.rateAppointment = catchAsync(async (req, res) => {
+  const appt = await customerService.submitCustomerRating(req.user.id, req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Thank you for your feedback',
+    data: appt
+  });
+});
+
 // Tracking
 exports.trackAppointment = catchAsync(async (req, res) => {
   const tracking = await customerService.trackAppointment(req.user.id, req.params.appointmentId);

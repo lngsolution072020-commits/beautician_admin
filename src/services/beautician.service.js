@@ -6,6 +6,7 @@ const ApiError = require('../utils/apiError');
 const { APPOINTMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint } = require('../utils/location');
+const appointmentRatingService = require('./appointmentRating.service');
 
 // Ensure beautician owns the appointment
 const assertBeauticianAccess = (appointment, beauticianId) => {
@@ -13,6 +14,13 @@ const assertBeauticianAccess = (appointment, beauticianId) => {
     throw new ApiError(403, 'Forbidden: appointment not assigned to beautician');
   }
 };
+
+async function assertNoPendingBeauticianRatings(beauticianId) {
+  const n = await appointmentRatingService.countPendingBeauticianRatings(beauticianId);
+  if (n > 0) {
+    throw new ApiError(400, 'Please rate your customers for completed appointments first.');
+  }
+}
 
 // Appointments list for beautician
 const getAppointments = async (beauticianId, query) => {
@@ -51,29 +59,71 @@ const updateStatus = async (beauticianId, id, allowedFromStatuses, newStatus, ti
   return appt;
 };
 
-const acceptAppointment = (beauticianId, id) =>
-  updateStatus(beauticianId, id, [APPOINTMENT_STATUS.PENDING], APPOINTMENT_STATUS.ACCEPTED);
+const acceptAppointment = async (beauticianId, id) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  return updateStatus(beauticianId, id, [APPOINTMENT_STATUS.PENDING], APPOINTMENT_STATUS.ACCEPTED);
+};
 
 const rejectAppointment = (beauticianId, id) =>
   updateStatus(beauticianId, id, [APPOINTMENT_STATUS.PENDING], APPOINTMENT_STATUS.REJECTED);
 
-const startAppointment = (beauticianId, id) =>
-  updateStatus(
+const startAppointment = async (beauticianId, id) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  return updateStatus(
     beauticianId,
     id,
     [APPOINTMENT_STATUS.ACCEPTED],
     APPOINTMENT_STATUS.IN_PROGRESS,
     'startedAt'
   );
+};
 
-const completeAppointment = (beauticianId, id) =>
-  updateStatus(
+const completeAppointment = async (beauticianId, id) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  return updateStatus(
     beauticianId,
     id,
     [APPOINTMENT_STATUS.IN_PROGRESS],
     APPOINTMENT_STATUS.COMPLETED,
     'completedAt'
   );
+};
+
+const getPendingRatingsForBeautician = async (beauticianId) => {
+  const items = await Appointment.find({
+    beautician: beauticianId,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    'ratingFromBeautician.stars': { $exists: false }
+  })
+    .populate('customer', 'name phone')
+    .populate('service', 'name')
+    .sort({ completedAt: -1 })
+    .lean();
+
+  return { items };
+};
+
+const submitBeauticianRating = async (beauticianId, appointmentId, { stars, comment }) => {
+  const appt = await Appointment.findById(appointmentId);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertBeauticianAccess(appt, beauticianId);
+  if (appt.status !== APPOINTMENT_STATUS.COMPLETED) {
+    throw new ApiError(400, 'You can rate only after the service is completed');
+  }
+  if (appt.ratingFromBeautician && appt.ratingFromBeautician.stars != null) {
+    throw new ApiError(400, 'You have already submitted a rating');
+  }
+  const s = Math.min(5, Math.max(1, Math.round(Number(stars))));
+  if (!Number.isFinite(s)) throw new ApiError(400, 'Invalid rating');
+  appt.ratingFromBeautician = {
+    stars: s,
+    comment: comment ? String(comment).trim().slice(0, 500) : '',
+    createdAt: new Date()
+  };
+  await appt.save();
+  await appointmentRatingService.recalculateCustomerAverageRating(appt.customer);
+  return appt;
+};
 
 // Location tracking
 const updateLocation = async (beauticianId, { appointmentId, lat, lng }) => {
@@ -186,6 +236,8 @@ module.exports = {
   rejectAppointment,
   startAppointment,
   completeAppointment,
+  getPendingRatingsForBeautician,
+  submitBeauticianRating,
   updateLocation,
   getLocationHistory,
   recordProductUsage,

@@ -6,6 +6,22 @@ const Appointment = require('../models/Appointment');
 const { buildFileUrl } = require('../utils/fileUrl');
 
 // Appointments
+exports.getPendingRatings = catchAsync(async (req, res) => {
+  const data = await beauticianService.getPendingRatingsForBeautician(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Pending ratings',
+    data
+  });
+});
+
+exports.rateCustomer = catchAsync(async (req, res) => {
+  const appt = await beauticianService.submitBeauticianRating(req.user.id, req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Thank you for your feedback',
+    data: appt
+  });
+});
+
 exports.getAppointments = catchAsync(async (req, res) => {
   const { items, meta } = await beauticianService.getAppointments(req.user.id, req.query);
   const mapped = items.map((appt) => {
@@ -61,6 +77,13 @@ exports.startAppointment = catchAsync(async (req, res) => {
 
 exports.completeAppointment = catchAsync(async (req, res) => {
   const appt = await beauticianService.completeAppointment(req.user.id, req.params.id);
+  if (appt?.customer) {
+    notificationService.sendFCM(appt.customer._id || appt.customer, {
+      title: 'Service completed',
+      body: 'Please rate your beautician to book your next appointment.',
+      data: { type: 'appointment_completed', appointmentId: String(appt._id) }
+    }).catch(() => {});
+  }
   return ApiResponse.success(res, {
     message: 'Appointment completed',
     data: appt

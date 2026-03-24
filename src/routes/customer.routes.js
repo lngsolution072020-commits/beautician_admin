@@ -22,6 +22,12 @@ router.get('/services/:id', validate(customerValidation.serviceIdParam), custome
 // Booking
 router.post('/appointments', validate(customerValidation.createAppointment), customerController.createAppointment);
 router.get('/appointments', validate(customerValidation.getAppointments), customerController.getAppointments);
+router.get('/appointments/pending-ratings', customerController.getPendingRatings);
+router.post(
+  '/appointments/:id/rate',
+  validate(customerValidation.rateAppointment),
+  customerController.rateAppointment
+);
 router.get('/appointments/:id', validate(customerValidation.appointmentIdParam), customerController.getAppointmentById);
 router.put('/appointments/:id/cancel', validate(customerValidation.cancelAppointment), customerController.cancelAppointment);
 

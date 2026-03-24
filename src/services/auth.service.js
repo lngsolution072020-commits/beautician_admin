@@ -1,10 +1,12 @@
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const User = require('../models/User');
+const City = require('../models/City');
 const CustomerProfile = require('../models/CustomerProfile');
 const ApiError = require('../utils/apiError');
 const { ROLES } = require('../utils/constants');
 const { sendFCMToToken } = require('./notification.service');
+const { getDistanceInKm } = require('../utils/location');
 
 // In-memory OTP store: phone (normalized) -> { otp, expiresAt }
 const otpStore = new Map();
@@ -152,10 +154,12 @@ const getProfile = async (userId) => {
   }
   if (user.role === ROLES.CUSTOMER) {
     const cp = user.customerProfile
-      ? await CustomerProfile.findById(user.customerProfile).select('walletBalance').lean()
-      : await CustomerProfile.findOne({ user: userId }).select('walletBalance').lean();
+      ? await CustomerProfile.findById(user.customerProfile).select('walletBalance rating ratingCount').lean()
+      : await CustomerProfile.findOne({ user: userId }).select('walletBalance rating ratingCount').lean();
     const walletBalance = cp?.walletBalance != null ? cp.walletBalance : 0;
-    return { ...user, walletBalance };
+    const rating = cp?.rating != null ? cp.rating : 0;
+    const ratingCount = cp?.ratingCount != null ? cp.ratingCount : 0;
+    return { ...user, walletBalance, rating, ratingCount };
   }
   return user;
 };
@@ -327,6 +331,42 @@ const deleteAccount = async (userId, { password }) => {
   return true;
 };
 
+const listPublicCities = async () =>
+  City.find({ isActive: true })
+    .select('name state country latitude longitude')
+    .sort({ name: 1 })
+    .lean();
+
+/** Pick nearest city with stored coordinates; max ~150km to avoid wrong assignment */
+const detectCityByLatLng = async (lat, lng) => {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (Number.isNaN(la) || Number.isNaN(ln)) {
+    throw new ApiError(400, 'Invalid latitude or longitude');
+  }
+  const cities = await City.find({
+    isActive: true,
+    latitude: { $exists: true, $ne: null },
+    longitude: { $exists: true, $ne: null }
+  }).lean();
+  if (!cities.length) {
+    return { city: null, distanceKm: null };
+  }
+  let best = null;
+  let bestD = Infinity;
+  cities.forEach((c) => {
+    const d = getDistanceInKm({ coordinates: [c.longitude, c.latitude] }, { coordinates: [ln, la] });
+    if (d != null && d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  });
+  if (!best || bestD > 150) {
+    return { city: best, distanceKm: bestD === Infinity ? null : bestD };
+  }
+  return { city: best, distanceKm: bestD };
+};
+
 module.exports = {
   register,
   registerBeautician,
@@ -339,6 +379,8 @@ module.exports = {
   deleteAccount,
   updateFcmToken,
   sendOtp,
-  verifyOtp
+  verifyOtp,
+  listPublicCities,
+  detectCityByLatLng
 };
 

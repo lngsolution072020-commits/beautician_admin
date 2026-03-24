@@ -60,7 +60,19 @@ const appointmentSchema = new mongoose.Schema(
       default: 'online'
     },
     startedAt: Date,
-    completedAt: Date
+    completedAt: Date,
+    /** Customer rates beautician (mandatory after completion) */
+    ratingFromCustomer: {
+      stars: { type: Number, min: 1, max: 5 },
+      comment: { type: String, trim: true, maxlength: 500 },
+      createdAt: { type: Date }
+    },
+    /** Beautician rates customer (mandatory after completion) */
+    ratingFromBeautician: {
+      stars: { type: Number, min: 1, max: 5 },
+      comment: { type: String, trim: true, maxlength: 500 },
+      createdAt: { type: Date }
+    }
   },
   {
     timestamps: true

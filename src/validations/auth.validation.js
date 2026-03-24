@@ -75,6 +75,13 @@ const verifyOtp = {
   })
 };
 
+const detectCityQuery = {
+  query: Joi.object({
+    lat: Joi.number().required(),
+    lng: Joi.number().required()
+  })
+};
+
 module.exports = {
   register,
   registerBeautician,
@@ -85,6 +92,7 @@ module.exports = {
   deleteAccount,
   fcmToken,
   sendOtp,
-  verifyOtp
+  verifyOtp,
+  detectCityQuery
 };
 

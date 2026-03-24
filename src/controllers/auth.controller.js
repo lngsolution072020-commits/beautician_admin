@@ -166,3 +166,22 @@ exports.updateFcmToken = catchAsync(async (req, res) => {
   });
 });
 
+/** Public: cities for signup / location matching */
+exports.listPublicCities = catchAsync(async (req, res) => {
+  const items = await authService.listPublicCities();
+  return ApiResponse.success(res, {
+    message: 'Cities fetched',
+    data: { items }
+  });
+});
+
+/** Public: nearest operational city from GPS (requires cities with lat/lng stored) */
+exports.detectCity = catchAsync(async (req, res) => {
+  const { lat, lng } = req.query;
+  const result = await authService.detectCityByLatLng(lat, lng);
+  return ApiResponse.success(res, {
+    message: 'City detection',
+    data: result
+  });
+});
+

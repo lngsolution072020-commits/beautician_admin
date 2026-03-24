@@ -48,7 +48,7 @@ exports.createVendor = catchAsync(async (req, res) => {
 });
 
 exports.getVendors = catchAsync(async (req, res) => {
-  const { items, meta } = await adminService.getVendors(req.query);
+  const { items, meta } = await adminService.getVendors(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Vendors fetched',
     data: { items, meta }
@@ -288,7 +288,7 @@ exports.deleteService = catchAsync(async (req, res) => {
 
 // Beauticians
 exports.getBeauticians = catchAsync(async (req, res) => {
-  const { items, meta } = await adminService.getBeauticians(req.query);
+  const { items, meta } = await adminService.getBeauticians(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Beauticians fetched',
     data: { items, meta }
@@ -296,7 +296,7 @@ exports.getBeauticians = catchAsync(async (req, res) => {
 });
 
 exports.createBeautician = catchAsync(async (req, res) => {
-  const beautician = await adminService.createBeautician(req.body);
+  const beautician = await adminService.createBeautician(req.body, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Beautician created',
     statusCode: 201,
@@ -313,7 +313,7 @@ exports.getBeauticianById = catchAsync(async (req, res) => {
 });
 
 exports.updateBeautician = catchAsync(async (req, res) => {
-  const beautician = await adminService.updateBeautician(req.params.id, req.body);
+  const beautician = await adminService.updateBeautician(req.params.id, req.body, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Beautician updated',
     data: beautician
@@ -322,7 +322,7 @@ exports.updateBeautician = catchAsync(async (req, res) => {
 
 // Users
 exports.getUsers = catchAsync(async (req, res) => {
-  const { items, meta } = await adminService.getUsers(req.query);
+  const { items, meta } = await adminService.getUsers(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Users fetched',
     data: { items, meta }
@@ -330,7 +330,7 @@ exports.getUsers = catchAsync(async (req, res) => {
 });
 
 exports.getUserById = catchAsync(async (req, res) => {
-  const user = await adminService.getUserById(req.params.id);
+  const user = await adminService.getUserById(req.params.id, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'User details',
     data: user
@@ -338,7 +338,7 @@ exports.getUserById = catchAsync(async (req, res) => {
 });
 
 exports.updateUser = catchAsync(async (req, res) => {
-  const user = await adminService.updateUser(req.params.id, req.body);
+  const user = await adminService.updateUser(req.params.id, req.body, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'User updated',
     data: user
@@ -355,7 +355,7 @@ exports.getAlerts = catchAsync(async (req, res) => {
 });
 
 exports.getPayments = catchAsync(async (req, res) => {
-  const { items, meta } = await adminService.getPayments(req.query);
+  const { items, meta } = await adminService.getPayments(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Payments fetched',
     data: { items, meta }
@@ -363,7 +363,7 @@ exports.getPayments = catchAsync(async (req, res) => {
 });
 
 exports.getBeauticianLiveLocation = catchAsync(async (req, res) => {
-  const data = await adminService.getBeauticianLiveLocation(req.params.id);
+  const data = await adminService.getBeauticianLiveLocation(req.params.id, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Beautician live location fetched',
     data
@@ -372,7 +372,7 @@ exports.getBeauticianLiveLocation = catchAsync(async (req, res) => {
 
 // Appointments / Orders
 exports.getAppointments = catchAsync(async (req, res) => {
-  const { items, meta } = await adminService.getAppointments(req.query);
+  const { items, meta } = await adminService.getAppointments(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Appointments fetched',
     data: { items, meta }
@@ -380,7 +380,7 @@ exports.getAppointments = catchAsync(async (req, res) => {
 });
 
 exports.getAppointmentById = catchAsync(async (req, res) => {
-  const appointment = await adminService.getAppointmentById(req.params.id);
+  const appointment = await adminService.getAppointmentById(req.params.id, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Appointment fetched',
     data: appointment
@@ -397,7 +397,7 @@ exports.updateAppointment = catchAsync(async (req, res) => {
 
 // Dashboard & Reports
 exports.getDashboard = catchAsync(async (req, res) => {
-  const dashboard = await adminService.getDashboard();
+  const dashboard = await adminService.getDashboard(req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Dashboard data',
     data: dashboard
@@ -405,7 +405,7 @@ exports.getDashboard = catchAsync(async (req, res) => {
 });
 
 exports.getReports = catchAsync(async (req, res) => {
-  const reports = await adminService.getReports(req.query);
+  const reports = await adminService.getReports(req.query, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Reports data',
     data: reports

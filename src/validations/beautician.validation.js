@@ -17,6 +17,16 @@ const appointmentIdParam = {
   })
 };
 
+const rateCustomer = {
+  params: Joi.object({
+    id: objectId().required()
+  }),
+  body: Joi.object({
+    stars: Joi.number().integer().min(1).max(5).required(),
+    comment: Joi.string().max(500).allow('', null).optional()
+  })
+};
+
 // Location
 const updateLocation = {
   body: Joi.object({
@@ -67,6 +77,7 @@ const submitKyc = {
 module.exports = {
   getAppointments,
   appointmentIdParam,
+  rateCustomer,
   updateLocation,
   locationHistory,
   productUsage,

@@ -2,13 +2,23 @@ const Joi = require('joi');
 
 const objectId = () => Joi.string().hex().length(24);
 
+// 24-char ObjectId hex (Mongo accepts upper or lower case in drivers)
+const objectIdHex24 = () =>
+  Joi.string()
+    .length(24)
+    .pattern(/^[a-fA-F0-9]{24}$/)
+    .custom((val) => String(val).toLowerCase());
+
 // Cities
 const createCity = {
   body: Joi.object({
     name: Joi.string().min(2).max(100).required(),
     state: Joi.string().optional(),
     country: Joi.string().optional(),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    googlePlaceId: Joi.string().max(200).optional().allow('')
   })
 };
 
@@ -20,7 +30,10 @@ const updateCity = {
     name: Joi.string().min(2).max(100).optional(),
     state: Joi.string().optional(),
     country: Joi.string().optional(),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    googlePlaceId: Joi.string().max(200).optional().allow('')
   })
 };
 
@@ -40,7 +53,9 @@ const createVendor = {
     phone: Joi.string().optional(),
     city: objectId().required(),
     address: Joi.string().optional(),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    /** Login password for admin / vendor panel (optional — random one is generated if omitted) */
+    panelPassword: Joi.string().min(6).max(72).optional()
   })
 };
 
@@ -63,9 +78,12 @@ const updateVendor = {
   ...vendorIdParam,
   body: Joi.object({
     name: Joi.string().min(2).max(100).optional(),
+    email: Joi.string().email().optional(),
     phone: Joi.string().optional(),
     address: Joi.string().optional(),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    city: objectId().optional(),
+    panelPassword: Joi.string().min(6).max(72).optional()
   })
 };
 
@@ -247,7 +265,7 @@ const updateBeautician = {
     documents: Joi.array()
       .items(
         Joi.object({
-          id: objectId().required(),
+          id: objectIdHex24().required(),
           status: Joi.string().valid('pending', 'approved', 'rejected').optional(),
           notes: Joi.string().allow('').optional()
         })

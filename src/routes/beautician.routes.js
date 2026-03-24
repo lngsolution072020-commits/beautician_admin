@@ -14,6 +14,12 @@ router.use(authMiddleware, roleMiddleware(ROLES.BEAUTICIAN));
 
 // Appointments
 router.get('/appointments', validate(beauticianValidation.getAppointments), beauticianController.getAppointments);
+router.get('/appointments/pending-ratings', beauticianController.getPendingRatings);
+router.post(
+  '/appointments/:id/rate-customer',
+  validate(beauticianValidation.rateCustomer),
+  beauticianController.rateCustomer
+);
 router.put('/appointments/:id/accept', validate(beauticianValidation.appointmentIdParam), beauticianController.acceptAppointment);
 router.put('/appointments/:id/reject', validate(beauticianValidation.appointmentIdParam), beauticianController.rejectAppointment);
 router.put('/appointments/:id/start', validate(beauticianValidation.appointmentIdParam), beauticianController.startAppointment);

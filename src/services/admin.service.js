@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const City = require('../models/City');
 const Vendor = require('../models/Vendor');
 const Service = require('../models/Service');
@@ -14,13 +15,36 @@ const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constant
 const { getDistanceInKm } = require('../utils/location');
 const notificationService = require('./notification.service');
 
+/** Appointments visible to a vendor admin: same city (customer or beautician) or vendor id on booking */
+async function buildVendorAppointmentMatch(vendorScope) {
+  if (!vendorScope) return {};
+  const { cityId, vendorId } = vendorScope;
+  const cityUsers = await User.find({ city: cityId }).select('_id').lean();
+  const ids = cityUsers.map((u) => u._id);
+  return {
+    $or: [{ customer: { $in: ids } }, { beautician: { $in: ids } }, { vendor: vendorId }]
+  };
+}
+
+async function assertUserInVendorCity(userId, vendorScope) {
+  if (!vendorScope) return;
+  const u = await User.findById(userId).select('city').lean();
+  if (!u || !u.city || String(u.city) !== String(vendorScope.cityId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+}
+
 // City management
 const createCity = async (payload) => {
   const name = payload.name.trim();
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const existing = await City.findOne({ name: { $regex: new RegExp(`^${escaped}$`, 'i') } });
   if (existing) throw new ApiError(409, 'A city with this name already exists');
-  return City.create(payload);
+  const doc = { ...payload, name };
+  if (payload.latitude != null) doc.latitude = Number(payload.latitude);
+  if (payload.longitude != null) doc.longitude = Number(payload.longitude);
+  if (payload.googlePlaceId) doc.googlePlaceId = String(payload.googlePlaceId).trim();
+  return City.create(doc);
 };
 
 const getCities = async (query) => {
@@ -49,12 +73,37 @@ const deleteCity = async (id) => {
 };
 
 // Vendor management
-const createVendor = (payload) => Vendor.create(payload);
+const createVendor = async (payload) => {
+  const { panelPassword, ...rest } = payload;
+  const email = rest.email.toLowerCase().trim();
+  const existingUser = await User.findOne({ email });
+  if (existingUser) throw new ApiError(400, 'Email already in use');
+  const existingVendorEmail = await Vendor.findOne({ email });
+  if (existingVendorEmail) throw new ApiError(400, 'Vendor email already exists');
 
-const getVendors = async (query) => {
+  const vendor = await Vendor.create({ ...rest, email });
+  const pwd =
+    panelPassword && String(panelPassword).trim().length >= 6
+      ? String(panelPassword).trim()
+      : `Vendor${Math.floor(1000 + Math.random() * 9000)}!`;
+  await User.create({
+    name: rest.name,
+    email,
+    password: pwd,
+    phone: rest.phone,
+    role: ROLES.VENDOR,
+    vendor: vendor._id,
+    city: rest.city
+  });
+  return Vendor.findById(vendor._id).populate('city');
+};
+
+const getVendors = async (query, vendorScope) => {
   const { page, limit, skip } = getPagination(query);
   const filter = {};
-  if (query.cityId) filter.city = query.cityId;
+  if (vendorScope) {
+    filter._id = vendorScope.vendorId;
+  } else if (query.cityId) filter.city = query.cityId;
   if (query.search) {
     filter.name = { $regex: query.search, $options: 'i' };
   }
@@ -65,21 +114,65 @@ const getVendors = async (query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
-const getVendorById = async (id) => {
+const getVendorById = async (id, vendorScope) => {
+  if (vendorScope && String(id) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
   const vendor = await Vendor.findById(id).populate('city');
   if (!vendor) throw new ApiError(404, 'Vendor not found');
   return vendor;
 };
 
 const updateVendor = async (id, payload) => {
-  const vendor = await Vendor.findByIdAndUpdate(id, payload, { new: true });
+  const { panelPassword, email, ...rest } = payload;
+  const vendor = await Vendor.findById(id);
   if (!vendor) throw new ApiError(404, 'Vendor not found');
-  return vendor;
+
+  if (email !== undefined) {
+    const em = String(email).toLowerCase().trim();
+    const linkedUser = await User.findOne({ vendor: id, role: ROLES.VENDOR });
+    const userClash = await User.findOne({ email: em });
+    if (userClash && linkedUser && String(userClash._id) !== String(linkedUser._id)) {
+      throw new ApiError(400, 'Email already in use');
+    }
+    const vClash = await Vendor.findOne({ email: em, _id: { $ne: id } });
+    if (vClash) throw new ApiError(400, 'Email already used by another vendor');
+    vendor.email = em;
+  }
+  if (rest.name !== undefined) vendor.name = rest.name.trim();
+  if (rest.phone !== undefined) vendor.phone = rest.phone || '';
+  if (rest.address !== undefined) vendor.address = rest.address || '';
+  if (rest.isActive !== undefined) vendor.isActive = rest.isActive;
+  if (rest.city !== undefined) vendor.city = rest.city;
+  await vendor.save();
+
+  let linkedUser = await User.findOne({ vendor: id, role: ROLES.VENDOR });
+  if (!linkedUser && panelPassword && String(panelPassword).trim().length >= 6) {
+    linkedUser = await User.create({
+      name: vendor.name,
+      email: vendor.email,
+      password: String(panelPassword).trim(),
+      role: ROLES.VENDOR,
+      vendor: vendor._id,
+      city: vendor.city
+    });
+  } else if (linkedUser) {
+    if (panelPassword !== undefined && String(panelPassword).trim().length >= 6) {
+      linkedUser.password = String(panelPassword).trim();
+    }
+    if (email !== undefined) linkedUser.email = vendor.email;
+    if (rest.name !== undefined) linkedUser.name = vendor.name;
+    if (rest.city !== undefined) linkedUser.city = rest.city;
+    await linkedUser.save();
+  }
+
+  return Vendor.findById(id).populate('city');
 };
 
 const deleteVendor = async (id) => {
   const vendor = await Vendor.findByIdAndDelete(id);
   if (!vendor) throw new ApiError(404, 'Vendor not found');
+  await User.deleteMany({ vendor: id, role: ROLES.VENDOR });
   return true;
 };
 
@@ -169,7 +262,7 @@ const deleteService = async (id) => {
 };
 
 // Beauticians (admin: all beauticians across vendors)
-const getBeauticians = async (query) => {
+const getBeauticians = async (query, vendorScope) => {
   const { page, limit, skip } = getPagination(query);
 
   const userMatch = { role: ROLES.BEAUTICIAN };
@@ -179,7 +272,8 @@ const getBeauticians = async (query) => {
       { phone: { $regex: String(query.search).replace(/\s/g, ''), $options: 'i' } }
     ];
   }
-  if (query.cityId) userMatch.city = query.cityId;
+  const cityFilter = vendorScope ? String(vendorScope.cityId) : query.cityId;
+  if (cityFilter) userMatch.city = cityFilter;
 
   const userIds = await User.find(userMatch).select('_id').lean();
   const userIdList = userIds.map((u) => u._id);
@@ -241,13 +335,18 @@ const getBeauticians = async (query) => {
   return { items: formatted, meta: getMeta({ page, limit, total: totalCount }) };
 };
 
-const getBeauticianById = async (userId) => {
+const getBeauticianById = async (userId, vendorScope) => {
   const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN })
     .select('-password')
     .populate('city')
     .populate('vendor')
     .lean();
   if (!user) throw new ApiError(404, 'Beautician not found');
+  if (vendorScope) {
+    if (!user.city || String(user.city) !== String(vendorScope.cityId)) {
+      throw new ApiError(403, 'Forbidden');
+    }
+  }
   const profile = await BeauticianProfile.findOne({ user: userId }).populate('vendor').lean();
   if (!profile) throw new ApiError(404, 'Beautician profile not found');
 
@@ -302,7 +401,10 @@ const getBeauticianById = async (userId) => {
   };
 };
 
-const updateBeautician = async (userId, payload) => {
+const updateBeautician = async (userId, payload, vendorScope) => {
+  if (vendorScope) {
+    throw new ApiError(403, 'Forbidden');
+  }
   const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN });
   if (!user) throw new ApiError(404, 'Beautician not found');
   const profile = await BeauticianProfile.findOne({ user: userId });
@@ -324,24 +426,32 @@ const updateBeautician = async (userId, payload) => {
   if (payload.vendorId !== undefined) profile.vendor = payload.vendorId || undefined;
 
   if (payload.kycStatus !== undefined) profile.kycStatus = payload.kycStatus;
-  if (Array.isArray(payload.documents)) {
+  if (Array.isArray(payload.documents) && payload.documents.length > 0) {
     payload.documents.forEach((docUpdate) => {
       if (!docUpdate || !docUpdate.id) return;
-      const existing = profile.documents.id(docUpdate.id);
+      const idStr = String(docUpdate.id).toLowerCase();
+      if (!mongoose.Types.ObjectId.isValid(idStr)) return;
+      const oid = new mongoose.Types.ObjectId(idStr);
+      const existing = profile.documents.find((d) => d._id && d._id.equals(oid));
       if (!existing) return;
       if (docUpdate.status !== undefined) existing.status = docUpdate.status;
       if (docUpdate.notes !== undefined) existing.notes = docUpdate.notes;
     });
+    // Ensure nested array changes are persisted (Mongoose can miss in-place subdoc edits)
+    profile.markModified('documents');
   }
 
   await Promise.all([user.save(), profile.save()]);
-  return getBeauticianById(userId);
+  return getBeauticianById(userId, null);
 };
 
 // Users (all roles: customer, beautician, etc.)
-const getUsers = async (query) => {
+const getUsers = async (query, vendorScope) => {
   const { page, limit, skip } = getPagination(query);
   const filter = { role: { $in: [ROLES.CUSTOMER, ROLES.BEAUTICIAN] } };
+  if (vendorScope) {
+    filter.city = vendorScope.cityId;
+  }
   if (query.role) filter.role = query.role;
   if (query.search) {
     filter.$or = [
@@ -409,14 +519,17 @@ const getUsers = async (query) => {
   return { items: formatted, meta: getMeta({ page, limit, total }) };
 };
 
-const getUserById = async (userId) => {
+const getUserById = async (userId, vendorScope) => {
   const user = await User.findById(userId).select('-password').populate('city').lean();
   if (!user) throw new ApiError(404, 'User not found');
+  if (vendorScope) {
+    await assertUserInVendorCity(userId, vendorScope);
+  }
   const uid = user._id.toString();
   const cityName = user.city && (typeof user.city === 'object' ? user.city.name : user.city);
 
   if (user.role === ROLES.BEAUTICIAN) {
-    return getBeauticianById(userId);
+    return getBeauticianById(userId, vendorScope);
   }
 
   if (user.role === ROLES.CUSTOMER) {
@@ -461,7 +574,10 @@ const getUserById = async (userId) => {
   };
 };
 
-const updateUser = async (userId, payload) => {
+const updateUser = async (userId, payload, vendorScope) => {
+  if (vendorScope) {
+    throw new ApiError(403, 'Forbidden');
+  }
   const user = await User.findById(userId);
   if (!user) throw new ApiError(404, 'User not found');
   if (payload.name !== undefined) user.name = payload.name.trim();
@@ -471,10 +587,13 @@ const updateUser = async (userId, payload) => {
   }
   if (payload.isActive !== undefined) user.isActive = payload.isActive;
   await user.save();
-  return getUserById(userId);
+  return getUserById(userId, null);
 };
 
-const createBeautician = async (payload) => {
+const createBeautician = async (payload, vendorScope) => {
+  if (vendorScope) {
+    throw new ApiError(403, 'Forbidden');
+  }
   const { name, email, password, phone, vendorId, cityId } = payload;
   const vendor = await Vendor.findById(vendorId).populate('city');
   if (!vendor) throw new ApiError(404, 'Vendor not found');
@@ -516,7 +635,166 @@ const createBeautician = async (payload) => {
 };
 
 // Dashboard and reports (simplified aggregations)
-const getDashboard = async () => {
+async function getDashboardVendorScoped(vs) {
+  const scopeMatch = await buildVendorAppointmentMatch(vs);
+  const cityId = vs.cityId;
+  const vendorId = vs.vendorId;
+
+  const scopedApptIds = (await Appointment.find(scopeMatch).select('_id').lean()).map((a) => a._id);
+  const cityUserIds = (await User.find({ city: cityId }).select('_id').lean()).map((u) => u._id);
+  const beauticianIdsInCity = (await User.find({ role: ROLES.BEAUTICIAN, city: cityId }).select('_id').lean()).map((u) => u._id);
+
+  const [
+    customersInCity,
+    beauticiansInCity,
+    appointments,
+    totalPaidPayments,
+    services,
+    beauticianUsers,
+    lastLocations,
+    inProgressByBeautician,
+    revenueRow,
+    delayedAppointments,
+    pendingPayments,
+    bCount,
+    vendorName
+  ] = await Promise.all([
+    User.countDocuments({ role: ROLES.CUSTOMER, city: cityId }),
+    User.countDocuments({ role: ROLES.BEAUTICIAN, city: cityId }),
+    Appointment.countDocuments(scopeMatch),
+    Payment.countDocuments({
+      status: 'paid',
+      $or: [{ appointment: { $in: scopedApptIds } }, { paymentType: 'wallet_recharge', customer: { $in: cityUserIds } }]
+    }),
+    Service.countDocuments(),
+    User.find({ role: ROLES.BEAUTICIAN, city: cityId })
+      .select('name city')
+      .populate('city')
+      .lean(),
+    beauticianIdsInCity.length
+      ? LocationTracking.aggregate([
+          { $match: { beautician: { $in: beauticianIdsInCity } } },
+          { $sort: { recordedAt: -1 } },
+          { $group: { _id: '$beautician', location: { $first: '$location' }, recordedAt: { $first: '$recordedAt' } } }
+        ])
+      : Promise.resolve([]),
+    beauticianIdsInCity.length
+      ? Appointment.find({
+          status: APPOINTMENT_STATUS.IN_PROGRESS,
+          beautician: { $in: beauticianIdsInCity }
+        })
+          .select('beautician')
+          .lean()
+      : Promise.resolve([]),
+    Payment.aggregate([
+      { $match: { status: 'paid' } },
+      { $lookup: { from: 'appointments', localField: 'appointment', foreignField: '_id', as: 'app' } },
+      { $unwind: '$app' },
+      { $match: { 'app.vendor': vendorId } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]),
+    Appointment.find({
+      status: APPOINTMENT_STATUS.IN_PROGRESS,
+      startedAt: { $exists: true, $ne: null },
+      beautician: { $in: beauticianIdsInCity },
+      $expr: { $gt: [{ $subtract: [new Date(), '$startedAt'] }, 45 * 60 * 1000] }
+    })
+      .populate({ path: 'beautician', populate: { path: 'city' } })
+      .lean(),
+    Payment.find({
+      status: 'pending',
+      $or: [{ appointment: { $in: scopedApptIds } }, { paymentType: 'wallet_recharge', customer: { $in: cityUserIds } }]
+    }).countDocuments(),
+    BeauticianProfile.countDocuments({ vendor: vendorId }),
+    Vendor.findById(vendorId).select('name').lean()
+  ]);
+
+  const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
+  const locationByBeautician = {};
+  (lastLocations || []).forEach((l) => {
+    locationByBeautician[l._id.toString()] = l;
+  });
+  const busySet = new Set((inProgressByBeautician || []).map((a) => a.beautician?.toString()).filter(Boolean));
+  const liveBeauticians = (beauticianUsers || []).map((u) => {
+    const uid = u._id.toString();
+    const loc = locationByBeautician[uid];
+    const coords = loc?.location?.coordinates;
+    let status = 'offline';
+    if (busySet.has(uid)) status = 'busy';
+    else if (loc && new Date(loc.recordedAt) > fifteenMinAgo) status = 'online';
+    return {
+      id: uid,
+      name: u.name,
+      status,
+      city: u.city?.name || (u.city && u.city.name) || '',
+      lat: coords && coords[1] != null ? coords[1] : 19.076,
+      lng: coords && coords[0] != null ? coords[0] : 72.877
+    };
+  });
+
+  const recentAlerts = [];
+  (delayedAppointments || []).slice(0, 5).forEach((a) => {
+    recentAlerts.push({
+      id: a._id.toString(),
+      type: 'critical',
+      title: 'Service Delay Alert',
+      description: `Beautician ${a.beautician?.name || 'Unknown'} delayed`,
+      time: 'Just now',
+      city: a.beautician?.city?.name || ''
+    });
+  });
+  if (pendingPayments > 0) {
+    recentAlerts.push({
+      id: 'payment-pending',
+      type: 'warning',
+      title: 'Payment Pending',
+      description: `${pendingPayments} settlements pending in your scope`,
+      time: 'Recently',
+      city: ''
+    });
+  }
+  if (recentAlerts.length === 0) {
+    recentAlerts.push({
+      id: 'info-1',
+      type: 'info',
+      title: 'System OK',
+      description: 'No critical alerts',
+      time: new Date().toISOString(),
+      city: ''
+    });
+  }
+
+  const rev = revenueRow && revenueRow[0] && revenueRow[0].total ? revenueRow[0].total : 0;
+  const name = vendorName?.name || 'Vendor';
+  const topVendors = [
+    {
+      id: vendorId.toString(),
+      name,
+      city: '',
+      revenue: rev,
+      beauticians: bCount || 0,
+      growth: 0,
+      avatar: name.substring(0, 2).toUpperCase()
+    }
+  ];
+
+  return {
+    totalCities: 1,
+    totalVendors: 1,
+    totalServices: services,
+    totalAppointments: appointments,
+    totalPaidPayments,
+    liveBeauticians,
+    recentAlerts,
+    topVendors,
+    scope: { customersInCity, beauticiansInCity }
+  };
+}
+
+const getDashboard = async (vendorScope) => {
+  if (vendorScope) {
+    return getDashboardVendorScoped(vendorScope);
+  }
   const [cities, vendors, services, appointments, payments, beauticianUsers, lastLocations, inProgressByBeautician, vendorRevenue, delayedAppointments, pendingPayments] = await Promise.all([
     City.countDocuments(),
     Vendor.countDocuments(),
@@ -625,15 +903,27 @@ const getDashboard = async () => {
   };
 };
 
-const getAlerts = async () => {
+const getAlerts = async (vendorScope) => {
+  const delayedFilter = {
+    status: APPOINTMENT_STATUS.IN_PROGRESS,
+    startedAt: { $exists: true, $ne: null }
+  };
+  if (vendorScope) {
+    const bids = await User.find({ role: ROLES.BEAUTICIAN, city: vendorScope.cityId }).select('_id').lean();
+    delayedFilter.beautician = { $in: bids.map((b) => b._id) };
+  }
+
+  const pendingPayFilter = { status: 'pending' };
+  if (vendorScope) {
+    const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+    const scopedApptIds = (await Appointment.find(scopeMatch).select('_id').lean()).map((a) => a._id);
+    const cityUserIds = (await User.find({ city: vendorScope.cityId }).select('_id').lean()).map((u) => u._id);
+    pendingPayFilter.$or = [{ appointment: { $in: scopedApptIds } }, { paymentType: 'wallet_recharge', customer: { $in: cityUserIds } }];
+  }
+
   const [delayed, pendingPayments] = await Promise.all([
-    Appointment.find({
-      status: APPOINTMENT_STATUS.IN_PROGRESS,
-      startedAt: { $exists: true, $ne: null }
-    })
-      .populate('beautician')
-      .lean(),
-    Payment.find({ status: 'pending' }).lean()
+    Appointment.find(delayedFilter).populate('beautician').lean(),
+    Payment.find(pendingPayFilter).lean()
   ]);
 
   const alerts = [];
@@ -687,7 +977,7 @@ const getAlerts = async () => {
   return alerts;
 };
 
-const getReports = async (query) => {
+const getReports = async (query, vendorScope) => {
   const match = {};
   if (query.from || query.to) {
     match.createdAt = {};
@@ -697,6 +987,13 @@ const getReports = async (query) => {
       toDate.setHours(23, 59, 59, 999);
       match.createdAt.$lte = toDate;
     }
+  }
+
+  if (vendorScope) {
+    const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+    const scopedApptIds = (await Appointment.find(scopeMatch).select('_id').lean()).map((a) => a._id);
+    const cityUserIds = (await User.find({ city: vendorScope.cityId }).select('_id').lean()).map((u) => u._id);
+    match.$or = [{ appointment: { $in: scopedApptIds } }, { paymentType: 'wallet_recharge', customer: { $in: cityUserIds } }];
   }
 
   const payments = await Payment.aggregate([
@@ -713,9 +1010,14 @@ const getReports = async (query) => {
   return { payments };
 };
 
-const getBeauticianLiveLocation = async (userId) => {
+const getBeauticianLiveLocation = async (userId, vendorScope) => {
   const user = await User.findOne({ _id: userId, role: ROLES.BEAUTICIAN }).populate('city').lean();
   if (!user) throw new ApiError(404, 'Beautician not found');
+  if (vendorScope) {
+    if (!user.city || String(user.city._id || user.city) !== String(vendorScope.cityId)) {
+      throw new ApiError(403, 'Forbidden');
+    }
+  }
 
   const latest = await LocationTracking.findOne({ beautician: user._id })
     .sort({ recordedAt: -1 })
@@ -736,10 +1038,23 @@ const getBeauticianLiveLocation = async (userId) => {
   };
 };
 
-const getPayments = async (query) => {
+const getPayments = async (query, vendorScope) => {
   const { page, limit, skip } = getPagination(query);
   const filter = {};
   if (query.status) filter.status = query.status;
+
+  if (vendorScope) {
+    const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+    const scopedAppts = await Appointment.find(scopeMatch).select('_id').lean();
+    const apptIds = scopedAppts.map((a) => a._id);
+    const cityUsers = await User.find({ city: vendorScope.cityId }).select('_id').lean();
+    const uidList = cityUsers.map((u) => u._id);
+    filter.$or = [
+      { appointment: { $in: apptIds } },
+      { paymentType: 'wallet_recharge', customer: { $in: uidList } }
+    ];
+  }
+
   const [items, total] = await Promise.all([
     Payment.find(filter)
       .populate('customer', 'name phone')
@@ -772,13 +1087,18 @@ const getPayments = async (query) => {
 };
 
 // Appointments list for admin – show which customer booked which beautician + beautician live distance
-const getAppointments = async (query) => {
+const getAppointments = async (query, vendorScope) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = {};
+  const base = {};
+  if (query.status) base.status = query.status;
+  if (query.customerId) base.customer = query.customerId;
+  if (query.beauticianId) base.beautician = query.beauticianId;
 
-  if (query.status) filter.status = query.status;
-  if (query.customerId) filter.customer = query.customerId;
-  if (query.beauticianId) filter.beautician = query.beauticianId;
+  let filter = base;
+  if (vendorScope) {
+    const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+    filter = Object.keys(base).length ? { $and: [base, scopeMatch] } : scopeMatch;
+  }
 
   const [items, total] = await Promise.all([
     Appointment.find(filter)
@@ -845,11 +1165,17 @@ const getAppointments = async (query) => {
   return { items: formatted, meta: getMeta({ page, limit, total }) };
 };
 
-const getAppointmentById = async (id) => {
+const getAppointmentById = async (id, vendorScope) => {
   const appointment = await Appointment.findById(id)
     .populate('customer beautician service')
     .lean();
   if (!appointment) throw new ApiError(404, 'Appointment not found');
+
+  if (vendorScope) {
+    const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+    const test = await Appointment.findOne({ _id: id, ...scopeMatch }).select('_id').lean();
+    if (!test) throw new ApiError(403, 'Forbidden');
+  }
 
   const customer = appointment.customer || {};
   const beautician = appointment.beautician || {};
@@ -894,7 +1220,10 @@ const getAppointmentById = async (id) => {
   };
 };
 
-const updateAppointment = async (id, payload) => {
+const updateAppointment = async (id, payload, vendorScope) => {
+  if (vendorScope) {
+    throw new ApiError(403, 'Forbidden');
+  }
   const appointment = await Appointment.findById(id);
   if (!appointment) throw new ApiError(404, 'Appointment not found');
 
@@ -943,7 +1272,7 @@ const updateAppointment = async (id, payload) => {
     }
   }
 
-  return getAppointmentById(id);
+  return getAppointmentById(id, null);
 };
 
 module.exports = {
