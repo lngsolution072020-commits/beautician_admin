@@ -68,6 +68,12 @@ const verifyPayment = {
   })
 };
 
+const initiateWalletRecharge = {
+  body: Joi.object({
+    amount: Joi.number().min(1).max(500000).required()
+  })
+};
+
 const getInvoices = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
@@ -84,6 +90,7 @@ module.exports = {
   cancelAppointment,
   trackAppointment,
   initiatePayment,
+  initiateWalletRecharge,
   verifyPayment,
   getInvoices
 };

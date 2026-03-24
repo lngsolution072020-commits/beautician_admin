@@ -122,6 +122,14 @@ exports.verifyPayment = catchAsync(async (req, res) => {
   });
 });
 
+exports.initiateWalletRecharge = catchAsync(async (req, res) => {
+  const data = await customerService.initiateWalletRecharge(req.user.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Wallet recharge initiated',
+    data
+  });
+});
+
 exports.getInvoices = catchAsync(async (req, res) => {
   const { items, meta } = await customerService.getInvoices(req.user.id, req.query);
   return ApiResponse.success(res, {

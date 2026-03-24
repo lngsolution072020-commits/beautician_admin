@@ -3,10 +3,15 @@ const { PAYMENT_STATUS } = require('../utils/constants');
 
 const paymentSchema = new mongoose.Schema(
   {
+    paymentType: {
+      type: String,
+      enum: ['appointment', 'wallet_recharge'],
+      default: 'appointment'
+    },
     appointment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Appointment',
-      required: true
+      default: null
     },
     customer: {
       type: mongoose.Schema.Types.ObjectId,

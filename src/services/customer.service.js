@@ -1,10 +1,12 @@
+const env = require('../config/env');
 const Service = require('../models/Service');
 const Banner = require('../models/Banner');
 const Category = require('../models/Category');
 const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
-const User = require('../models/User');
+const CustomerProfile = require('../models/CustomerProfile');
+const razorpayService = require('./razorpay.service');
 const BeauticianProfile = require('../models/BeauticianProfile');
 const ApiError = require('../utils/apiError');
 const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
@@ -72,6 +74,17 @@ const createAppointment = async (customerId, payload) => {
   const scheduledAt = rawScheduledAt instanceof Date ? rawScheduledAt : new Date(rawScheduledAt);
   if (Number.isNaN(scheduledAt.getTime())) {
     throw new ApiError(400, 'Invalid date/time for booking. Please select a valid date and time.');
+  }
+
+  if (paymentMode === 'wallet') {
+    const profile = await CustomerProfile.findOne({ user: customerId });
+    if (!profile) throw new ApiError(400, 'Customer profile not found');
+    const bal = profile.walletBalance != null ? profile.walletBalance : 0;
+    if (bal < price) {
+      throw new ApiError(400, 'Insufficient wallet balance');
+    }
+    profile.walletBalance = bal - price;
+    await profile.save();
   }
 
   const appointment = await Appointment.create({
@@ -215,7 +228,17 @@ const trackAppointment = async (customerId, appointmentId) => {
   };
 };
 
-// Payments (mock Razorpay integration)
+async function creditCustomerWallet(userId, amountRupees) {
+  const profile = await CustomerProfile.findOne({ user: userId });
+  if (!profile) throw new ApiError(404, 'Customer profile not found');
+  const add = Number(amountRupees);
+  if (!Number.isFinite(add) || add <= 0) return profile;
+  profile.walletBalance = (profile.walletBalance != null ? profile.walletBalance : 0) + add;
+  await profile.save();
+  return profile;
+}
+
+// Razorpay: create order + pending Payment (appointment checkout)
 const initiatePayment = async (customerId, { appointmentId }) => {
   const appt = await Appointment.findById(appointmentId);
   if (!appt) throw new ApiError(404, 'Appointment not found');
@@ -223,21 +246,107 @@ const initiatePayment = async (customerId, { appointmentId }) => {
     throw new ApiError(403, 'Forbidden: appointment does not belong to customer');
   }
 
-  // In production, call Razorpay to create an order.
-  const orderId = `order_mock_${Date.now()}`;
+  const amountRupees = Number(appt.price);
+  if (!Number.isFinite(amountRupees) || amountRupees < 1) {
+    throw new ApiError(400, 'Invalid amount for payment');
+  }
+
+  if (!razorpayService.isConfigured()) {
+    throw new ApiError(
+      503,
+      'Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (test or live keys from Razorpay Dashboard).'
+    );
+  }
+
+  const rz = razorpayService.getClient();
+  const amountPaise = razorpayService.rupeesToPaise(amountRupees);
+  const receipt = `a_${String(appt._id)}_${Date.now()}`.slice(0, 40);
+
+  let order;
+  try {
+    order = await rz.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      receipt,
+      notes: {
+        type: 'appointment',
+        appointmentId: String(appt._id),
+        customerId: String(customerId)
+      }
+    });
+  } catch (e) {
+    const msg = e?.error?.description || e?.message || 'Razorpay order failed';
+    throw new ApiError(502, msg);
+  }
 
   const payment = await Payment.create({
+    paymentType: 'appointment',
     appointment: appt.id,
     customer: customerId,
-    amount: appt.price,
-    providerOrderId: orderId
+    amount: amountRupees,
+    providerOrderId: order.id
   });
 
   return {
     paymentId: payment.id,
-    orderId,
-    amount: appt.price,
-    currency: 'INR'
+    orderId: order.id,
+    amount: amountRupees,
+    amountPaise,
+    currency: 'INR',
+    keyId: env.razorpay.keyId,
+    mode: razorpayService.getRazorpayMode()
+  };
+};
+
+const initiateWalletRecharge = async (customerId, { amount }) => {
+  const amountRupees = Number(amount);
+  if (!Number.isFinite(amountRupees) || amountRupees < 1 || amountRupees > 500000) {
+    throw new ApiError(400, 'Amount must be between ₹1 and ₹5,00,000');
+  }
+
+  if (!razorpayService.isConfigured()) {
+    throw new ApiError(
+      503,
+      'Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (test or live keys from Razorpay Dashboard).'
+    );
+  }
+
+  const rz = razorpayService.getClient();
+  const amountPaise = razorpayService.rupeesToPaise(amountRupees);
+  const receipt = `w_${String(customerId)}_${Date.now()}`.slice(0, 40);
+
+  let order;
+  try {
+    order = await rz.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      receipt,
+      notes: {
+        type: 'wallet_recharge',
+        customerId: String(customerId)
+      }
+    });
+  } catch (e) {
+    const msg = e?.error?.description || e?.message || 'Razorpay order failed';
+    throw new ApiError(502, msg);
+  }
+
+  const payment = await Payment.create({
+    paymentType: 'wallet_recharge',
+    appointment: null,
+    customer: customerId,
+    amount: amountRupees,
+    providerOrderId: order.id
+  });
+
+  return {
+    paymentId: payment.id,
+    orderId: order.id,
+    amount: amountRupees,
+    amountPaise,
+    currency: 'INR',
+    keyId: env.razorpay.keyId,
+    mode: razorpayService.getRazorpayMode()
   };
 };
 
@@ -248,12 +357,30 @@ const verifyPayment = async (customerId, { paymentId, providerPaymentId, provide
     throw new ApiError(403, 'Forbidden: payment does not belong to customer');
   }
 
-  // In production, verify Razorpay signature.
+  if (payment.status === PAYMENT_STATUS.PAID) {
+    return payment;
+  }
+
+  const valid = razorpayService.verifyPaymentSignature(
+    payment.providerOrderId,
+    providerPaymentId,
+    providerSignature
+  );
+  if (!valid) {
+    payment.status = PAYMENT_STATUS.FAILED;
+    await payment.save();
+    throw new ApiError(400, 'Invalid payment signature');
+  }
+
   payment.providerPaymentId = providerPaymentId;
   payment.providerSignature = providerSignature;
   payment.status = PAYMENT_STATUS.PAID;
-  await payment.save();
 
+  if (payment.paymentType === 'wallet_recharge') {
+    await creditCustomerWallet(customerId, payment.amount);
+  }
+
+  await payment.save();
   return payment;
 };
 
@@ -280,6 +407,7 @@ module.exports = {
   cancelAppointment,
   trackAppointment,
   initiatePayment,
+  initiateWalletRecharge,
   verifyPayment,
   getInvoices
 };

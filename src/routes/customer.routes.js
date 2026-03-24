@@ -31,6 +31,11 @@ router.get('/track/:appointmentId', validate(customerValidation.trackAppointment
 // Payments
 router.post('/payment/initiate', validate(customerValidation.initiatePayment), customerController.initiatePayment);
 router.post('/payment/verify', validate(customerValidation.verifyPayment), customerController.verifyPayment);
+router.post(
+  '/wallet/recharge/initiate',
+  validate(customerValidation.initiateWalletRecharge),
+  customerController.initiateWalletRecharge
+);
 router.get('/invoices', validate(customerValidation.getInvoices), customerController.getInvoices);
 
 module.exports = router;

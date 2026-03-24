@@ -760,6 +760,7 @@ const getPayments = async (query) => {
     id: p._id.toString(),
     amount: p.amount || 0,
     status: p.status,
+    paymentType: p.paymentType || 'appointment',
     customerName: p.customer?.name || '',
     beauticianName: p.appointment?.beautician?.name || '',
     vendorName: p.appointment?.vendor?.name || '',

@@ -146,9 +146,16 @@ const logout = async () => true;
 
 // Get current authenticated user profile
 const getProfile = async (userId) => {
-  const user = await User.findById(userId).select('-password');
+  const user = await User.findById(userId).select('-password').lean();
   if (!user) {
     throw new ApiError(404, 'User not found');
+  }
+  if (user.role === ROLES.CUSTOMER) {
+    const cp = user.customerProfile
+      ? await CustomerProfile.findById(user.customerProfile).select('walletBalance').lean()
+      : await CustomerProfile.findOne({ user: userId }).select('walletBalance').lean();
+    const walletBalance = cp?.walletBalance != null ? cp.walletBalance : 0;
+    return { ...user, walletBalance };
   }
   return user;
 };

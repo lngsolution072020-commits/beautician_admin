@@ -19,7 +19,9 @@ const env = {
   },
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID || '',
-    keySecret: process.env.RAZORPAY_KEY_SECRET || ''
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    /** Optional: `test` | `live`. If unset, inferred from key id (rzp_test_ / rzp_live_) or NODE_ENV. */
+    mode: process.env.RAZORPAY_MODE || ''
   },
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
