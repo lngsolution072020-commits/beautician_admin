@@ -23,9 +23,19 @@ const PAYMENT_STATUS = {
   REFUNDED: 'refunded'
 };
 
+const PRODUCT_ORDER_STATUS = {
+  PENDING_PAYMENT: 'pending_payment',
+  CONFIRMED: 'confirmed',
+  PROCESSING: 'processing',
+  SHIPPED: 'shipped',
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled'
+};
+
 module.exports = {
   ROLES,
   APPOINTMENT_STATUS,
-  PAYMENT_STATUS
+  PAYMENT_STATUS,
+  PRODUCT_ORDER_STATUS
 };
 

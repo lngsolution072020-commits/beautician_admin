@@ -7,11 +7,19 @@ const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
 const CustomerProfile = require('../models/CustomerProfile');
+const Inventory = require('../models/Inventory');
+const ProductOrder = require('../models/ProductOrder');
+const Vendor = require('../models/Vendor');
 const razorpayService = require('./razorpay.service');
 const BeauticianProfile = require('../models/BeauticianProfile');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
-const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
+const {
+  ROLES,
+  APPOINTMENT_STATUS,
+  PAYMENT_STATUS,
+  PRODUCT_ORDER_STATUS
+} = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
 const notificationService = require('./notification.service');
@@ -338,8 +346,249 @@ async function creditCustomerWallet(userId, amountRupees) {
   return profile;
 }
 
-// Razorpay: create order + pending Payment (appointment checkout)
-const initiatePayment = async (customerId, { appointmentId }) => {
+async function decrementInventoryForProductOrder(po) {
+  for (const line of po.items) {
+    const inv = await Inventory.findById(line.inventoryItem);
+    if (!inv) throw new ApiError(400, 'A product in this order is no longer available');
+    if (inv.quantity < line.quantity) {
+      throw new ApiError(400, `Insufficient stock for ${line.name}. Please contact support.`);
+    }
+    inv.quantity -= line.quantity;
+    await inv.save();
+  }
+}
+
+// Shop: products in customer's city (vendor inventory marked for shop)
+const getShopProducts = async (customerId, query) => {
+  const { page, limit, skip } = getPagination(query);
+  const user = await User.findById(customerId).select('city').lean();
+  if (!user?.city) {
+    return { items: [], meta: getMeta({ page, limit, total: 0 }) };
+  }
+  const vendorIds = await Vendor.find({ city: user.city, isActive: true }).distinct('_id');
+  if (!vendorIds.length) {
+    return { items: [], meta: getMeta({ page, limit, total: 0 }) };
+  }
+  const filter = {
+    vendor: { $in: vendorIds },
+    isActive: true,
+    showInShop: true,
+    quantity: { $gt: 0 },
+    sellingPrice: { $gt: 0 }
+  };
+  if (query.search) {
+    filter.name = { $regex: query.search, $options: 'i' };
+  }
+  const [items, total] = await Promise.all([
+    Inventory.find(filter).populate('vendor', 'name').skip(skip).limit(limit).sort({ createdAt: -1 }).lean(),
+    Inventory.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const createProductOrder = async (customerId, payload) => {
+  const { items: rawItems, address, lat, lng, paymentMode: rawMode } = payload;
+  const paymentMode = ['online', 'cod', 'wallet'].includes(rawMode) ? rawMode : 'online';
+
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw new ApiError(400, 'Add at least one product');
+  }
+
+  const user = await User.findById(customerId).select('city').lean();
+  if (!user?.city) {
+    throw new ApiError(400, 'Set your city in profile before ordering products');
+  }
+
+  const lines = [];
+  let vendorId = null;
+  let totalAmount = 0;
+
+  for (const row of rawItems) {
+    const invId = row.inventoryItemId || row.inventoryItem;
+    const inv = await Inventory.findById(invId);
+    if (!inv || !inv.isActive || !inv.showInShop) {
+      throw new ApiError(404, 'Product not found or not available');
+    }
+    const vendorDoc = await Vendor.findById(inv.vendor).lean();
+    if (!vendorDoc || !vendorDoc.isActive) throw new ApiError(400, 'Vendor unavailable');
+    if (String(vendorDoc.city) !== String(user.city)) {
+      throw new ApiError(400, 'Product is not available in your city');
+    }
+    const vId = String(inv.vendor);
+    if (vendorId == null) vendorId = vId;
+    else if (vendorId !== vId) {
+      throw new ApiError(400, 'All items must be from the same salon (checkout separately otherwise)');
+    }
+
+    const qty = Math.max(1, Math.floor(Number(row.quantity)));
+    if (inv.quantity < qty) {
+      throw new ApiError(400, `Not enough stock for ${inv.name}`);
+    }
+    const unit = Number(inv.sellingPrice);
+    if (!Number.isFinite(unit) || unit <= 0) {
+      throw new ApiError(400, 'Product is not priced for sale');
+    }
+    const lineTotal = Math.round(unit * qty * 100) / 100;
+    totalAmount += lineTotal;
+    lines.push({
+      inventoryItem: inv._id,
+      name: inv.name,
+      sku: inv.sku || '',
+      unitPrice: unit,
+      quantity: qty,
+      lineTotal
+    });
+  }
+
+  totalAmount = Math.round(totalAmount * 100) / 100;
+  const addr = String(address || '').trim();
+  if (addr.length < 5) throw new ApiError(400, 'Please enter a valid delivery address');
+
+  let status = PRODUCT_ORDER_STATUS.PENDING_PAYMENT;
+  if (paymentMode === 'online') {
+    status = PRODUCT_ORDER_STATUS.PENDING_PAYMENT;
+  } else if (paymentMode === 'wallet') {
+    const profile = await CustomerProfile.findOne({ user: customerId });
+    if (!profile) throw new ApiError(400, 'Customer profile not found');
+    const bal = profile.walletBalance != null ? profile.walletBalance : 0;
+    if (bal < totalAmount) throw new ApiError(400, 'Insufficient wallet balance');
+    profile.walletBalance = bal - totalAmount;
+    await profile.save();
+    status = PRODUCT_ORDER_STATUS.CONFIRMED;
+    await decrementInventoryForProductOrder({ items: lines });
+  } else if (paymentMode === 'cod') {
+    status = PRODUCT_ORDER_STATUS.CONFIRMED;
+    await decrementInventoryForProductOrder({ items: lines });
+  }
+
+  const order = await ProductOrder.create({
+    customer: customerId,
+    vendor: vendorId,
+    items: lines,
+    address: addr,
+    location:
+      lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+        ? { type: 'Point', coordinates: [Number(lng), Number(lat)] }
+        : undefined,
+    totalAmount,
+    paymentMode,
+    status
+  });
+
+  if (paymentMode === 'wallet') {
+    await Payment.create({
+      paymentType: 'product_order',
+      productOrder: order._id,
+      appointment: null,
+      customer: customerId,
+      amount: totalAmount,
+      status: PAYMENT_STATUS.PAID
+    });
+  }
+
+  return order;
+};
+
+const getProductOrders = async (customerId, query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = { customer: customerId };
+  const [items, total] = await Promise.all([
+    ProductOrder.find(filter).populate('vendor', 'name').skip(skip).limit(limit).sort({ createdAt: -1 }).lean(),
+    ProductOrder.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const getProductOrderById = async (customerId, id) => {
+  const order = await ProductOrder.findById(id).populate('vendor', 'name').lean();
+  if (!order) throw new ApiError(404, 'Order not found');
+  if (String(order.customer) !== String(customerId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  return order;
+};
+
+const cancelProductOrder = async (customerId, id) => {
+  const order = await ProductOrder.findById(id);
+  if (!order) throw new ApiError(404, 'Order not found');
+  if (String(order.customer) !== String(customerId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  if (order.status !== PRODUCT_ORDER_STATUS.PENDING_PAYMENT || order.paymentMode !== 'online') {
+    throw new ApiError(400, 'This order cannot be cancelled');
+  }
+  await ProductOrder.deleteOne({ _id: id });
+  return true;
+};
+
+// Razorpay: create order + pending Payment (appointment or product checkout)
+const initiatePayment = async (customerId, { appointmentId, productOrderId }) => {
+  if (productOrderId) {
+    const po = await ProductOrder.findById(productOrderId);
+    if (!po) throw new ApiError(404, 'Order not found');
+    if (String(po.customer) !== String(customerId)) {
+      throw new ApiError(403, 'Forbidden');
+    }
+    if (po.status !== PRODUCT_ORDER_STATUS.PENDING_PAYMENT) {
+      throw new ApiError(400, 'Order is not awaiting online payment');
+    }
+    if (po.paymentMode !== 'online') {
+      throw new ApiError(400, 'This order does not use online payment');
+    }
+
+    const amountRupees = Number(po.totalAmount);
+    if (!Number.isFinite(amountRupees) || amountRupees < 1) {
+      throw new ApiError(400, 'Invalid amount for payment');
+    }
+
+    if (!razorpayService.isConfigured()) {
+      throw new ApiError(
+        503,
+        'Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (test or live keys from Razorpay Dashboard).'
+      );
+    }
+
+    const rz = razorpayService.getClient();
+    const amountPaise = razorpayService.rupeesToPaise(amountRupees);
+    const receipt = `p_${String(po._id)}_${Date.now()}`.slice(0, 40);
+
+    let order;
+    try {
+      order = await rz.orders.create({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt,
+        notes: {
+          type: 'product_order',
+          productOrderId: String(po._id),
+          customerId: String(customerId)
+        }
+      });
+    } catch (e) {
+      const msg = e?.error?.description || e?.message || 'Razorpay order failed';
+      throw new ApiError(502, msg);
+    }
+
+    const payment = await Payment.create({
+      paymentType: 'product_order',
+      productOrder: po.id,
+      appointment: null,
+      customer: customerId,
+      amount: amountRupees,
+      providerOrderId: order.id
+    });
+
+    return {
+      paymentId: payment.id,
+      orderId: order.id,
+      amount: amountRupees,
+      amountPaise,
+      currency: 'INR',
+      keyId: env.razorpay.keyId,
+      mode: razorpayService.getRazorpayMode()
+    };
+  }
+
   const appt = await Appointment.findById(appointmentId);
   if (!appt) throw new ApiError(404, 'Appointment not found');
   if (String(appt.customer) !== String(customerId)) {
@@ -451,7 +700,7 @@ const initiateWalletRecharge = async (customerId, { amount }) => {
 };
 
 const verifyPayment = async (customerId, { paymentId, providerPaymentId, providerSignature }) => {
-  const payment = await Payment.findById(paymentId).populate('appointment');
+  const payment = await Payment.findById(paymentId).populate('appointment').populate('productOrder');
   if (!payment) throw new ApiError(404, 'Payment not found');
   if (String(payment.customer) !== String(customerId)) {
     throw new ApiError(403, 'Forbidden: payment does not belong to customer');
@@ -478,6 +727,15 @@ const verifyPayment = async (customerId, { paymentId, providerPaymentId, provide
 
   if (payment.paymentType === 'wallet_recharge') {
     await creditCustomerWallet(customerId, payment.amount);
+  }
+
+  if (payment.paymentType === 'product_order' && payment.productOrder) {
+    const po = await ProductOrder.findById(payment.productOrder._id || payment.productOrder);
+    if (po && po.status === PRODUCT_ORDER_STATUS.PENDING_PAYMENT) {
+      await decrementInventoryForProductOrder(po);
+      po.status = PRODUCT_ORDER_STATUS.CONFIRMED;
+      await po.save();
+    }
   }
 
   await payment.save();
@@ -587,6 +845,11 @@ module.exports = {
   trackAppointment,
   getPendingRatingsForCustomer,
   submitCustomerRating,
+  getShopProducts,
+  createProductOrder,
+  getProductOrders,
+  getProductOrderById,
+  cancelProductOrder,
   initiatePayment,
   initiateWalletRecharge,
   verifyPayment,

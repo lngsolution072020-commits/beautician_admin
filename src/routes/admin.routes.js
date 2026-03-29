@@ -25,6 +25,18 @@ router.get('/vendors/:id', validate(adminValidation.vendorIdParam), adminControl
 router.put('/vendors/:id', superAdminOnly, validate(adminValidation.updateVendor), adminController.updateVendor);
 router.delete('/vendors/:id', superAdminOnly, validate(adminValidation.vendorIdParam), adminController.deleteVendor);
 
+// Inventory & product orders (super admin + vendor — vendor scoped to own salon)
+router.get('/inventory', validate(adminValidation.getInventory), adminController.getInventory);
+router.post('/inventory', validate(adminValidation.createInventoryItem), adminController.createInventoryItem);
+router.put('/inventory/:id', validate(adminValidation.updateInventoryItem), adminController.updateInventoryItem);
+router.delete('/inventory/:id', validate(adminValidation.inventoryIdParam), adminController.deleteInventoryItem);
+router.get('/product-orders', validate(adminValidation.getProductOrders), adminController.getProductOrders);
+router.patch(
+  '/product-orders/:id/status',
+  validate(adminValidation.updateProductOrderStatus),
+  adminController.updateProductOrderStatus
+);
+
 // Banners — super admin only
 router.post('/banners', superAdminOnly, uploadBanner.single('image'), validate(adminValidation.createBanner), adminController.createBanner);
 router.get('/banners', superAdminOnly, validate(adminValidation.getBanners), adminController.getBanners);

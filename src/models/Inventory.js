@@ -33,6 +33,20 @@ const inventorySchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    /** Shown in customer shop (same stock as salon usage) */
+    showInShop: {
+      type: Boolean,
+      default: true
+    },
+    imageUrl: {
+      type: String,
+      trim: true
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 2000
     }
   },
   {

@@ -5,12 +5,17 @@ const paymentSchema = new mongoose.Schema(
   {
     paymentType: {
       type: String,
-      enum: ['appointment', 'wallet_recharge'],
+      enum: ['appointment', 'wallet_recharge', 'product_order'],
       default: 'appointment'
     },
     appointment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Appointment',
+      default: null
+    },
+    productOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProductOrder',
       default: null
     },
     customer: {

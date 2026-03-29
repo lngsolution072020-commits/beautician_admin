@@ -344,6 +344,73 @@ const updateAppointment = {
   })
 };
 
+const getInventory = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    search: Joi.string().optional().allow(''),
+    vendorId: objectId().optional()
+  })
+};
+
+const createInventoryItem = {
+  body: Joi.object({
+    vendorId: objectId().optional(),
+    name: Joi.string().min(1).max(200).required(),
+    sku: Joi.string().max(80).optional().allow(''),
+    quantity: Joi.number().min(0).optional(),
+    unit: Joi.string().max(40).optional().allow(''),
+    costPrice: Joi.number().min(0).optional(),
+    sellingPrice: Joi.number().min(0).optional(),
+    isActive: Joi.boolean().optional(),
+    showInShop: Joi.boolean().optional(),
+    imageUrl: Joi.string().max(500).optional().allow(''),
+    description: Joi.string().max(2000).optional().allow('')
+  })
+};
+
+const inventoryIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const updateInventoryItem = {
+  ...inventoryIdParam,
+  body: Joi.object({
+    name: Joi.string().min(1).max(200).optional(),
+    sku: Joi.string().max(80).optional().allow(''),
+    quantity: Joi.number().min(0).optional(),
+    unit: Joi.string().max(40).optional().allow(''),
+    costPrice: Joi.number().min(0).optional(),
+    sellingPrice: Joi.number().min(0).optional(),
+    isActive: Joi.boolean().optional(),
+    showInShop: Joi.boolean().optional(),
+    imageUrl: Joi.string().max(500).optional().allow(''),
+    description: Joi.string().max(2000).optional().allow('')
+  })
+};
+
+const getProductOrders = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    vendorId: objectId().optional(),
+    status: Joi.string().optional().allow('')
+  })
+};
+
+const updateProductOrderStatus = {
+  params: Joi.object({
+    id: objectId().required()
+  }),
+  body: Joi.object({
+    status: Joi.string()
+      .valid('confirmed', 'processing', 'shipped', 'delivered', 'cancelled')
+      .required()
+  })
+};
+
 module.exports = {
   createCity,
   updateCity,
@@ -376,6 +443,12 @@ module.exports = {
   getPayments,
   getAppointments,
   appointmentIdParam,
-  updateAppointment
+  updateAppointment,
+  getInventory,
+  createInventoryItem,
+  inventoryIdParam,
+  updateInventoryItem,
+  getProductOrders,
+  updateProductOrderStatus
 };
 

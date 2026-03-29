@@ -9,9 +9,11 @@ const BeauticianProfile = require('../models/BeauticianProfile');
 const Appointment = require('../models/Appointment');
 const Payment = require('../models/Payment');
 const LocationTracking = require('../models/LocationTracking');
+const Inventory = require('../models/Inventory');
+const ProductOrder = require('../models/ProductOrder');
 const ApiError = require('../utils/apiError');
 const { getPagination, getMeta } = require('../utils/pagination');
-const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
+const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS, PRODUCT_ORDER_STATUS } = require('../utils/constants');
 const { getDistanceInKm } = require('../utils/location');
 const notificationService = require('./notification.service');
 
@@ -1275,6 +1277,136 @@ const updateAppointment = async (id, payload, vendorScope) => {
   return getAppointmentById(id, null);
 };
 
+// Inventory (admin / vendor panel — stock also powers customer shop in same city)
+const getAdminInventory = async (query, vendorScope) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = {};
+  if (vendorScope) {
+    filter.vendor = vendorScope.vendorId;
+  } else if (query.vendorId) {
+    filter.vendor = query.vendorId;
+  }
+  if (query.search) {
+    filter.name = { $regex: query.search, $options: 'i' };
+  }
+  const [items, total] = await Promise.all([
+    Inventory.find(filter).populate('vendor', 'name email').skip(skip).limit(limit).sort({ createdAt: -1 }),
+    Inventory.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const createAdminInventoryItem = async (payload, vendorScope) => {
+  const vendorId = vendorScope ? vendorScope.vendorId : payload.vendorId;
+  if (!vendorId) {
+    throw new ApiError(400, 'vendorId is required');
+  }
+  if (vendorScope && String(vendorId) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  const name = String(payload.name || '').trim();
+  if (!name) throw new ApiError(400, 'Name is required');
+  return Inventory.create({
+    vendor: vendorId,
+    name,
+    sku: payload.sku != null ? String(payload.sku).trim() : '',
+    quantity: payload.quantity != null ? Number(payload.quantity) : 0,
+    unit: payload.unit != null ? String(payload.unit).trim() : '',
+    costPrice: payload.costPrice != null ? Number(payload.costPrice) : undefined,
+    sellingPrice: payload.sellingPrice != null ? Number(payload.sellingPrice) : undefined,
+    isActive: payload.isActive !== false,
+    showInShop: payload.showInShop !== false,
+    imageUrl: payload.imageUrl != null ? String(payload.imageUrl).trim() : '',
+    description: payload.description != null ? String(payload.description).trim() : ''
+  });
+};
+
+const updateAdminInventoryItem = async (id, payload, vendorScope) => {
+  const item = await Inventory.findById(id);
+  if (!item) throw new ApiError(404, 'Inventory item not found');
+  if (vendorScope && String(item.vendor) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  const keys = [
+    'name',
+    'sku',
+    'quantity',
+    'unit',
+    'costPrice',
+    'sellingPrice',
+    'isActive',
+    'showInShop',
+    'imageUrl',
+    'description'
+  ];
+  keys.forEach((k) => {
+    if (payload[k] === undefined) return;
+    if (k === 'quantity' || k === 'costPrice' || k === 'sellingPrice') {
+      item[k] = payload[k] != null ? Number(payload[k]) : item[k];
+    } else if (k === 'isActive' || k === 'showInShop') {
+      item[k] = Boolean(payload[k]);
+    } else {
+      item[k] = payload[k];
+    }
+  });
+  await item.save();
+  return item;
+};
+
+const deleteAdminInventoryItem = async (id, vendorScope) => {
+  const item = await Inventory.findById(id);
+  if (!item) throw new ApiError(404, 'Inventory item not found');
+  if (vendorScope && String(item.vendor) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  await Inventory.deleteOne({ _id: id });
+  return true;
+};
+
+const getAdminProductOrders = async (query, vendorScope) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = {};
+  if (vendorScope) {
+    filter.vendor = vendorScope.vendorId;
+  } else if (query.vendorId) {
+    filter.vendor = query.vendorId;
+  }
+  if (query.status) {
+    filter.status = query.status;
+  }
+  const [items, total] = await Promise.all([
+    ProductOrder.find(filter)
+      .populate('customer', 'name email phone')
+      .populate('vendor', 'name')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 }),
+    ProductOrder.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const updateAdminProductOrderStatus = async (id, status, vendorScope) => {
+  const order = await ProductOrder.findById(id);
+  if (!order) throw new ApiError(404, 'Order not found');
+  if (vendorScope && String(order.vendor) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+  const allowed = [
+    PRODUCT_ORDER_STATUS.CONFIRMED,
+    PRODUCT_ORDER_STATUS.PROCESSING,
+    PRODUCT_ORDER_STATUS.SHIPPED,
+    PRODUCT_ORDER_STATUS.DELIVERED,
+    PRODUCT_ORDER_STATUS.CANCELLED
+  ];
+  if (!allowed.includes(status)) {
+    throw new ApiError(400, 'Invalid status');
+  }
+  order.status = status;
+  await order.save();
+  return order;
+};
+
 module.exports = {
   createCity,
   getCities,
@@ -1311,6 +1443,12 @@ module.exports = {
   getBeauticianLiveLocation,
   getAppointments,
   getAppointmentById,
-  updateAppointment
+  updateAppointment,
+  getAdminInventory,
+  createAdminInventoryItem,
+  updateAdminInventoryItem,
+  deleteAdminInventoryItem,
+  getAdminProductOrders,
+  updateAdminProductOrderStatus
 };
 

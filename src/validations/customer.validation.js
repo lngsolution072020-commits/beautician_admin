@@ -61,11 +61,52 @@ const trackAppointment = {
   })
 };
 
+// Shop / product orders
+const getShopProducts = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    search: Joi.string().optional().allow('')
+  })
+};
+
+const createProductOrder = {
+  body: Joi.object({
+    items: Joi.array()
+      .items(
+        Joi.object({
+          inventoryItemId: objectId().required(),
+          quantity: Joi.number().integer().min(1).max(999).required()
+        })
+      )
+      .min(1)
+      .required(),
+    address: Joi.string().min(5).max(500).required(),
+    lat: Joi.number().min(-90).max(90).optional(),
+    lng: Joi.number().min(-180).max(180).optional(),
+    paymentMode: Joi.string().valid('online', 'cod', 'wallet').optional()
+  })
+};
+
+const productOrderIdParam = {
+  params: Joi.object({
+    id: objectId().required()
+  })
+};
+
+const getProductOrders = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional()
+  })
+};
+
 // Payments
 const initiatePayment = {
   body: Joi.object({
-    appointmentId: objectId().required()
-  })
+    appointmentId: objectId().optional(),
+    productOrderId: objectId().optional()
+  }).or('appointmentId', 'productOrderId')
 };
 
 const verifyPayment = {
@@ -108,6 +149,10 @@ module.exports = {
   appointmentIdParam,
   cancelAppointment,
   trackAppointment,
+  getShopProducts,
+  createProductOrder,
+  productOrderIdParam,
+  getProductOrders,
   initiatePayment,
   initiateWalletRecharge,
   verifyPayment,

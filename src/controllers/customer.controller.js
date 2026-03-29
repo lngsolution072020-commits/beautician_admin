@@ -32,6 +32,14 @@ function attachBeauticianProfileImageUrl(req, item) {
   return item;
 }
 
+function mapShopInventoryItem(req, item) {
+  const obj = item.toObject ? item.toObject() : { ...item };
+  if (obj.imageUrl && !String(obj.imageUrl).startsWith('http')) {
+    obj.imageUrl = buildFileUrl(req, 'inventory', obj.imageUrl);
+  }
+  return obj;
+}
+
 exports.getCategories = catchAsync(async (req, res) => {
   const { items } = await customerService.getCategories();
   const mapped = items.map((c) => {
@@ -111,6 +119,49 @@ exports.getBeauticianSummary = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'Beautician profile',
     data: { ...summary, profileImageUrl }
+  });
+});
+
+// Shop (e-commerce — same inventory as salon, filtered by customer city)
+exports.getShopProducts = catchAsync(async (req, res) => {
+  const { items, meta } = await customerService.getShopProducts(req.user.id, req.query);
+  const mapped = items.map((i) => mapShopInventoryItem(req, i));
+  return ApiResponse.success(res, {
+    message: 'Shop products',
+    data: { items: mapped, meta }
+  });
+});
+
+exports.createProductOrder = catchAsync(async (req, res) => {
+  const order = await customerService.createProductOrder(req.user.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Order created',
+    statusCode: 201,
+    data: order
+  });
+});
+
+exports.getProductOrders = catchAsync(async (req, res) => {
+  const { items, meta } = await customerService.getProductOrders(req.user.id, req.query);
+  return ApiResponse.success(res, {
+    message: 'Product orders',
+    data: { items, meta }
+  });
+});
+
+exports.getProductOrderById = catchAsync(async (req, res) => {
+  const order = await customerService.getProductOrderById(req.user.id, req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Product order',
+    data: order
+  });
+});
+
+exports.cancelProductOrder = catchAsync(async (req, res) => {
+  await customerService.cancelProductOrder(req.user.id, req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Order cancelled',
+    data: {}
   });
 });
 

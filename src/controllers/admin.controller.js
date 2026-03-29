@@ -412,3 +412,64 @@ exports.getReports = catchAsync(async (req, res) => {
   });
 });
 
+function mapInventoryItem(req, item) {
+  const obj = item.toObject ? item.toObject() : { ...item };
+  if (obj.imageUrl && !String(obj.imageUrl).startsWith('http')) {
+    obj.imageUrl = buildFileUrl(req, 'inventory', obj.imageUrl);
+  }
+  return obj;
+}
+
+// Inventory & product orders (shop)
+exports.getInventory = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getAdminInventory(req.query, req.vendorScope);
+  const mapped = items.map((i) => mapInventoryItem(req, i));
+  return ApiResponse.success(res, {
+    message: 'Inventory',
+    data: { items: mapped, meta }
+  });
+});
+
+exports.createInventoryItem = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  const item = await adminService.createAdminInventoryItem(payload, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Inventory item created',
+    statusCode: 201,
+    data: mapInventoryItem(req, item)
+  });
+});
+
+exports.updateInventoryItem = catchAsync(async (req, res) => {
+  const payload = { ...req.body };
+  const item = await adminService.updateAdminInventoryItem(req.params.id, payload, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Inventory updated',
+    data: mapInventoryItem(req, item)
+  });
+});
+
+exports.deleteInventoryItem = catchAsync(async (req, res) => {
+  await adminService.deleteAdminInventoryItem(req.params.id, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Inventory item deleted',
+    data: {}
+  });
+});
+
+exports.getProductOrders = catchAsync(async (req, res) => {
+  const { items, meta } = await adminService.getAdminProductOrders(req.query, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Product orders',
+    data: { items, meta }
+  });
+});
+
+exports.updateProductOrderStatus = catchAsync(async (req, res) => {
+  const order = await adminService.updateAdminProductOrderStatus(req.params.id, req.body.status, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Order updated',
+    data: order
+  });
+});
+
