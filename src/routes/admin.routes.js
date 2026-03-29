@@ -6,7 +6,7 @@ const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { attachVendorScope, superAdminOnly } = require('../middlewares/adminScopeMiddleware');
 const { ROLES } = require('../utils/constants');
-const { upload, uploadBanner, uploadCategory } = require('../config/multer');
+const { upload, uploadBanner, uploadCategory, uploadInventory } = require('../config/multer');
 
 const router = express.Router();
 
@@ -27,8 +27,18 @@ router.delete('/vendors/:id', superAdminOnly, validate(adminValidation.vendorIdP
 
 // Inventory & product orders (super admin + vendor — vendor scoped to own salon)
 router.get('/inventory', validate(adminValidation.getInventory), adminController.getInventory);
-router.post('/inventory', validate(adminValidation.createInventoryItem), adminController.createInventoryItem);
-router.put('/inventory/:id', validate(adminValidation.updateInventoryItem), adminController.updateInventoryItem);
+router.post(
+  '/inventory',
+  uploadInventory.single('image'),
+  validate(adminValidation.createInventoryItem),
+  adminController.createInventoryItem
+);
+router.put(
+  '/inventory/:id',
+  uploadInventory.single('image'),
+  validate(adminValidation.updateInventoryItem),
+  adminController.updateInventoryItem
+);
 router.delete('/inventory/:id', validate(adminValidation.inventoryIdParam), adminController.deleteInventoryItem);
 router.get('/product-orders', validate(adminValidation.getProductOrders), adminController.getProductOrders);
 router.patch(

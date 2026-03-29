@@ -358,12 +358,13 @@ const createInventoryItem = {
     vendorId: objectId().optional(),
     name: Joi.string().min(1).max(200).required(),
     sku: Joi.string().max(80).optional().allow(''),
-    quantity: Joi.number().min(0).optional(),
+    quantity: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
     unit: Joi.string().max(40).optional().allow(''),
-    costPrice: Joi.number().min(0).optional(),
-    sellingPrice: Joi.number().min(0).optional(),
-    isActive: Joi.boolean().optional(),
-    showInShop: Joi.boolean().optional(),
+    costPrice: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
+    sellingPrice: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
+    /** multipart sends "true"/"false" strings */
+    isActive: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
+    showInShop: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
     imageUrl: Joi.string().max(500).optional().allow(''),
     description: Joi.string().max(2000).optional().allow('')
   })
@@ -380,14 +381,15 @@ const updateInventoryItem = {
   body: Joi.object({
     name: Joi.string().min(1).max(200).optional(),
     sku: Joi.string().max(80).optional().allow(''),
-    quantity: Joi.number().min(0).optional(),
+    quantity: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
     unit: Joi.string().max(40).optional().allow(''),
-    costPrice: Joi.number().min(0).optional(),
-    sellingPrice: Joi.number().min(0).optional(),
-    isActive: Joi.boolean().optional(),
-    showInShop: Joi.boolean().optional(),
+    costPrice: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
+    sellingPrice: Joi.alternatives().try(Joi.number().min(0), Joi.string()).optional(),
+    isActive: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
+    showInShop: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional(),
     imageUrl: Joi.string().max(500).optional().allow(''),
-    description: Joi.string().max(2000).optional().allow('')
+    description: Joi.string().max(2000).optional().allow(''),
+    clearImage: Joi.alternatives().try(Joi.boolean(), Joi.string().valid('true', 'false')).optional()
   })
 };
 

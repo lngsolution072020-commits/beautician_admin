@@ -420,6 +420,37 @@ function mapInventoryItem(req, item) {
   return obj;
 }
 
+/** Normalize multipart (and JSON) body for inventory create/update */
+function parseInventoryPayload(req) {
+  const b = req.body && typeof req.body === 'object' ? { ...req.body } : {};
+  if (req.file?.filename) {
+    b.imageUrl = req.file.filename;
+  } else if (b.clearImage === 'true' || b.clearImage === true) {
+    b.imageUrl = '';
+  }
+  delete b.clearImage;
+  const num = (v) => {
+    if (v === '' || v == null) return undefined;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : undefined;
+  };
+  if (b.quantity !== undefined) {
+    const q = num(b.quantity);
+    b.quantity = q != null ? q : 0;
+  }
+  if (b.costPrice !== undefined) b.costPrice = num(b.costPrice);
+  if (b.sellingPrice !== undefined) b.sellingPrice = num(b.sellingPrice);
+  const toBool = (v, def) => {
+    if (v === undefined || v === '') return def;
+    if (v === true || v === 'true' || v === '1' || v === 'on') return true;
+    if (v === false || v === 'false' || v === '0') return false;
+    return def;
+  };
+  b.isActive = toBool(b.isActive, true);
+  b.showInShop = toBool(b.showInShop, true);
+  return b;
+}
+
 // Inventory & product orders (shop)
 exports.getInventory = catchAsync(async (req, res) => {
   const { items, meta } = await adminService.getAdminInventory(req.query, req.vendorScope);
@@ -431,7 +462,7 @@ exports.getInventory = catchAsync(async (req, res) => {
 });
 
 exports.createInventoryItem = catchAsync(async (req, res) => {
-  const payload = { ...req.body };
+  const payload = parseInventoryPayload(req);
   const item = await adminService.createAdminInventoryItem(payload, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Inventory item created',
@@ -441,7 +472,7 @@ exports.createInventoryItem = catchAsync(async (req, res) => {
 });
 
 exports.updateInventoryItem = catchAsync(async (req, res) => {
-  const payload = { ...req.body };
+  const payload = parseInventoryPayload(req);
   const item = await adminService.updateAdminInventoryItem(req.params.id, payload, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Inventory updated',
