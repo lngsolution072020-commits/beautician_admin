@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const beauticianService = require('../services/beautician.service');
 const notificationService = require('../services/notification.service');
 const Appointment = require('../models/Appointment');
+const BeauticianProfile = require('../models/BeauticianProfile');
 const { buildFileUrl } = require('../utils/fileUrl');
 
 // Appointments
@@ -77,6 +78,7 @@ exports.startAppointment = catchAsync(async (req, res) => {
 
 exports.completeAppointment = catchAsync(async (req, res) => {
   const appt = await beauticianService.completeAppointment(req.user.id, req.params.id);
+  notificationService.refreshBeauticianPresenceAfterJobComplete(req.user.id).catch(() => {});
   if (appt?.customer) {
     notificationService.sendFCM(appt.customer._id || appt.customer, {
       title: 'Service completed',
@@ -99,8 +101,17 @@ exports.updateLocation = catchAsync(async (req, res) => {
   if (appt?.location?.coordinates?.length >= 2) {
     [destinationLng, destinationLat] = appt.location.coordinates;
   }
+  const bp = await BeauticianProfile.findOne({ user: req.user.id }).select('isAvailable').lean();
+  const isAvail = bp?.isAvailable !== false;
   const eta = await notificationService.notifyLocationUpdate(
-    appointmentId, lat, lng, destinationLat, destinationLng
+    appointmentId,
+    lat,
+    lng,
+    destinationLat,
+    destinationLng,
+    req.user.id,
+    appt?.status,
+    isAvail
   );
   const io = req.app.get('io');
   await notificationService.emitLocationToSocket(io, appointmentId, lat, lng, eta);
@@ -119,6 +130,14 @@ exports.getLocationHistory = catchAsync(async (req, res) => {
 });
 
 // Product usage
+exports.getInventory = catchAsync(async (req, res) => {
+  const data = await beauticianService.getVendorInventoryForBeautician(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Vendor inventory',
+    data
+  });
+});
+
 exports.recordProductUsage = catchAsync(async (req, res) => {
   const item = await beauticianService.recordProductUsage(req.user.id, req.body);
   return ApiResponse.success(res, {
@@ -131,6 +150,7 @@ exports.recordProductUsage = catchAsync(async (req, res) => {
 exports.setAvailability = catchAsync(async (req, res) => {
   const { isAvailable } = req.body;
   const result = await beauticianService.setAvailability(req.user.id, isAvailable);
+  notificationService.syncBeauticianPresenceFromAvailability(req.user.id, result.isAvailable).catch(() => {});
   return ApiResponse.success(res, {
     message: 'Availability updated',
     data: result

@@ -29,6 +29,9 @@ router.put('/appointments/:id/complete', validate(beauticianValidation.appointme
 router.post('/location/update', validate(beauticianValidation.updateLocation), beauticianController.updateLocation);
 router.get('/location/history', validate(beauticianValidation.locationHistory), beauticianController.getLocationHistory);
 
+// Vendor inventory (for product usage modal when completing a service)
+router.get('/inventory', beauticianController.getInventory);
+
 // Product usage
 router.post('/product-usage', validate(beauticianValidation.productUsage), beauticianController.recordProductUsage);
 

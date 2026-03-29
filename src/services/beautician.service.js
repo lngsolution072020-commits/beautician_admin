@@ -164,12 +164,38 @@ const getLocationHistory = async (beauticianId, { appointmentId, page, limit }) 
   return { items, meta: getMeta({ page: p, limit: l, total }) };
 };
 
-// Product usage (simple decrement in inventory)
-const recordProductUsage = async (beauticianId, { inventoryItemId, quantityUsed }) => {
-  const item = await Inventory.findById(inventoryItemId).populate('vendor');
-  if (!item) throw new ApiError(404, 'Inventory item not found');
+/** Active inventory rows for the beautician's linked vendor (vendor panel manages stock). */
+const getVendorInventoryForBeautician = async (beauticianId) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianId }).select('vendor').lean();
+  if (!profile?.vendor) {
+    return { items: [] };
+  }
+  const items = await Inventory.find({ vendor: profile.vendor, isActive: true })
+    .sort({ name: 1 })
+    .limit(200)
+    .lean();
+  return {
+    items: items.map((i) => ({
+      _id: i._id.toString(),
+      name: i.name,
+      sku: i.sku || '',
+      unit: (i.unit && String(i.unit).trim()) || 'pcs',
+      quantity: typeof i.quantity === 'number' ? i.quantity : 0
+    }))
+  };
+};
 
-  // In real implementation you would verify beautician's vendor matches inventory vendor
+// Product usage (decrement inventory; must belong to beautician's vendor)
+const recordProductUsage = async (beauticianId, { inventoryItemId, quantityUsed }) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianId }).select('vendor').lean();
+  if (!profile?.vendor) {
+    throw new ApiError(403, 'Beautician is not linked to a vendor');
+  }
+  const item = await Inventory.findById(inventoryItemId);
+  if (!item) throw new ApiError(404, 'Inventory item not found');
+  if (String(item.vendor) !== String(profile.vendor)) {
+    throw new ApiError(403, 'This product is not in your salon inventory');
+  }
 
   item.quantity = Math.max(0, (item.quantity || 0) - quantityUsed);
   await item.save();
@@ -241,6 +267,7 @@ module.exports = {
   updateLocation,
   getLocationHistory,
   recordProductUsage,
+  getVendorInventoryForBeautician,
   setAvailability,
   getKyc,
   submitKyc

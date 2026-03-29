@@ -148,7 +148,10 @@ const logout = async () => true;
 
 // Get current authenticated user profile
 const getProfile = async (userId) => {
-  const user = await User.findById(userId).select('-password').lean();
+  const user = await User.findById(userId)
+    .select('-password')
+    .populate('city', 'name state country')
+    .lean();
   if (!user) {
     throw new ApiError(404, 'User not found');
   }
@@ -176,7 +179,9 @@ const updateProfile = async (userId, payload) => {
 
   const user = await User.findByIdAndUpdate(userId, update, {
     new: true
-  }).select('-password');
+  })
+    .select('-password')
+    .populate('city', 'name state country');
 
   if (!user) {
     throw new ApiError(404, 'User not found');
@@ -324,7 +329,7 @@ const setProfileImage = async (userId, filename) => {
   }
   user.profileImage = filename;
   await user.save();
-  return User.findById(userId).select('-password').lean();
+  return User.findById(userId).select('-password').populate('city', 'name state country').lean();
 };
 
 const deleteAccount = async (userId, { password }) => {
