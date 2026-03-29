@@ -3,6 +3,8 @@ const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/apiError');
 const { attachProfileImageUrl } = require('../utils/profileImage');
 const authService = require('../services/auth.service');
+const referralSettingsService = require('../services/referralSettings.service');
+const platformCommissionSettingsService = require('../services/platformCommissionSettings.service');
 
 // Register new customer
 exports.register = catchAsync(async (req, res) => {
@@ -199,6 +201,24 @@ exports.detectCity = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'City detection',
     data: result
+  });
+});
+
+/** Public: referral program flags and reward amounts (for customer / beautician apps) */
+exports.getPublicReferralSettings = catchAsync(async (req, res) => {
+  const data = await referralSettingsService.getReferralSettings();
+  return ApiResponse.success(res, {
+    message: 'Referral settings',
+    data
+  });
+});
+
+/** Public: platform commission percentages (beautician vs vendor) for apps and estimates */
+exports.getPublicCommissionSettings = catchAsync(async (req, res) => {
+  const data = await platformCommissionSettingsService.getPlatformCommissionSettings();
+  return ApiResponse.success(res, {
+    message: 'Platform commission settings',
+    data
   });
 });
 

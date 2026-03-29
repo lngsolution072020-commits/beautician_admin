@@ -1,6 +1,8 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const adminService = require('../services/admin.service');
+const referralSettingsService = require('../services/referralSettings.service');
+const platformCommissionSettingsService = require('../services/platformCommissionSettings.service');
 const { buildFileUrl } = require('../utils/fileUrl');
 
 // Cities
@@ -501,6 +503,39 @@ exports.updateProductOrderStatus = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'Order updated',
     data: order
+  });
+});
+
+// Referral program (super admin routes only)
+exports.getReferralSettings = catchAsync(async (req, res) => {
+  const data = await referralSettingsService.getReferralSettings();
+  return ApiResponse.success(res, {
+    message: 'Referral settings',
+    data
+  });
+});
+
+exports.updateReferralSettings = catchAsync(async (req, res) => {
+  const data = await referralSettingsService.updateReferralSettings(req.body);
+  return ApiResponse.success(res, {
+    message: 'Referral settings updated',
+    data
+  });
+});
+
+exports.getPlatformCommissionSettings = catchAsync(async (req, res) => {
+  const data = await platformCommissionSettingsService.getPlatformCommissionSettings();
+  return ApiResponse.success(res, {
+    message: 'Platform commission settings',
+    data
+  });
+});
+
+exports.updatePlatformCommissionSettings = catchAsync(async (req, res) => {
+  const data = await platformCommissionSettingsService.updatePlatformCommissionSettings(req.body);
+  return ApiResponse.success(res, {
+    message: 'Platform commission settings updated',
+    data
   });
 });
 

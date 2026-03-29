@@ -13,6 +13,8 @@ router.post('/register-beautician', validate(authValidation.registerBeautician),
 router.post('/login', validate(authValidation.login), authController.login);
 router.get('/cities', authController.listPublicCities);
 router.get('/cities/detect', validate(authValidation.detectCityQuery), authController.detectCity);
+router.get('/referral-settings', authController.getPublicReferralSettings);
+router.get('/commission-settings', authController.getPublicCommissionSettings);
 router.post('/send-otp', validate(authValidation.sendOtp), authController.sendOtp);
 router.post('/verify-otp', validate(authValidation.verifyOtp), authController.verifyOtp);
 router.post('/refresh-token', validate(authValidation.refreshToken), authController.refreshToken);

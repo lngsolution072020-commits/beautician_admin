@@ -413,6 +413,25 @@ const updateProductOrderStatus = {
   })
 };
 
+const updateReferralSettings = {
+  body: Joi.object({
+    isEnabled: Joi.boolean().optional(),
+    customerRewardAmount: Joi.number().min(0).optional(),
+    beauticianRewardAmount: Joi.number().min(0).optional()
+  })
+    .min(1)
+    .messages({ 'object.min': 'At least one field is required' })
+};
+
+const updatePlatformCommissionSettings = {
+  body: Joi.object({
+    beauticianCommissionPercent: Joi.number().min(0).max(100).optional(),
+    vendorCommissionPercent: Joi.number().min(0).max(100).optional()
+  })
+    .min(1)
+    .messages({ 'object.min': 'At least one field is required' })
+};
+
 module.exports = {
   createCity,
   updateCity,
@@ -451,6 +470,8 @@ module.exports = {
   inventoryIdParam,
   updateInventoryItem,
   getProductOrders,
-  updateProductOrderStatus
+  updateProductOrderStatus,
+  updateReferralSettings,
+  updatePlatformCommissionSettings
 };
 

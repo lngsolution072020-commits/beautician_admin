@@ -90,4 +90,17 @@ router.put('/appointments/:id', superAdminOnly, validate(adminValidation.updateA
 router.get('/dashboard', adminController.getDashboard);
 router.get('/reports', validate(adminValidation.getReports), adminController.getReports);
 
+// Referral program — super admin only
+router.get('/referral-settings', superAdminOnly, adminController.getReferralSettings);
+router.put('/referral-settings', superAdminOnly, validate(adminValidation.updateReferralSettings), adminController.updateReferralSettings);
+
+// Platform commission — super admin only
+router.get('/commission-settings', superAdminOnly, adminController.getPlatformCommissionSettings);
+router.put(
+  '/commission-settings',
+  superAdminOnly,
+  validate(adminValidation.updatePlatformCommissionSettings),
+  adminController.updatePlatformCommissionSettings
+);
+
 module.exports = router;
