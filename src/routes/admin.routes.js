@@ -12,9 +12,9 @@ const router = express.Router();
 
 router.use(authMiddleware, roleMiddleware(ROLES.SUPER_ADMIN, ROLES.VENDOR), attachVendorScope);
 
-// Cities — super admin only
+// Cities — list readable by vendor panel (dropdowns); mutations super admin only
 router.post('/cities', superAdminOnly, validate(adminValidation.createCity), adminController.createCity);
-router.get('/cities', superAdminOnly, validate(adminValidation.getCities), adminController.getCities);
+router.get('/cities', validate(adminValidation.getCities), adminController.getCities);
 router.put('/cities/:id', superAdminOnly, validate(adminValidation.updateCity), adminController.updateCity);
 router.delete('/cities/:id', superAdminOnly, validate(adminValidation.updateCity), adminController.deleteCity);
 

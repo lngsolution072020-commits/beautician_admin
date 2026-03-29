@@ -9,8 +9,17 @@ const env = require('./config/env');
 
 const app = express();
 
-// Middlewares
-app.use(cors());
+// Middlewares — explicit CORS so browsers send GET after preflight (Authorization header)
+app.use(
+  cors({
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Type'],
+    optionsSuccessStatus: 204,
+    maxAge: 86400,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
