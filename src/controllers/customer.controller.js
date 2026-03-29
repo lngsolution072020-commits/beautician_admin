@@ -1,6 +1,7 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const customerService = require('../services/customer.service');
+const referralService = require('../services/referral.service');
 const { buildFileUrl } = require('../utils/fileUrl');
 
 // Banners & Categories (for home screen)
@@ -228,6 +229,14 @@ exports.getInvoices = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'Invoices fetched',
     data: { items, meta }
+  });
+});
+
+exports.getReferral = catchAsync(async (req, res) => {
+  const data = await referralService.getReferralInfoForUser(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Referral',
+    data
   });
 });
 

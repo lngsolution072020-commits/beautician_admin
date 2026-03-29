@@ -6,7 +6,8 @@ const register = {
     email: Joi.string().email().required(),
     password: Joi.string().min(6).max(50).required(),
     phone: Joi.string().optional(),
-    cityId: Joi.string().hex().length(24).optional()
+    cityId: Joi.string().hex().length(24).optional(),
+    referralCode: Joi.string().max(32).optional().allow('')
   })
 };
 
@@ -15,7 +16,8 @@ const registerBeautician = {
     name: Joi.string().min(2).max(100).required(),
     email: Joi.string().email().required(),
     password: Joi.string().min(6).max(50).required(),
-    phone: Joi.string().required()
+    phone: Joi.string().required(),
+    referralCode: Joi.string().max(32).optional().allow('')
     // City and vendor will be assigned later by admin; no raw IDs at signup
   })
 };

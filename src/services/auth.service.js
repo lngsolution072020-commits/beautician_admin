@@ -7,6 +7,8 @@ const ApiError = require('../utils/apiError');
 const { ROLES } = require('../utils/constants');
 const { sendFCMToToken } = require('./notification.service');
 const { getDistanceInKm } = require('../utils/location');
+const { normalizeReferralCodeInput } = require('../utils/referralCode');
+const referralService = require('./referral.service');
 
 // In-memory OTP store: phone (normalized) -> { otp, expiresAt }
 const otpStore = new Map();
@@ -42,10 +44,26 @@ const generateTokens = (user) => {
 };
 
 // Register a new customer user
-const register = async ({ name, email, password, phone, cityId }) => {
+const register = async ({ name, email, password, phone, cityId, referralCode: referralCodeInput }) => {
   const existing = await User.findOne({ email });
   if (existing) {
     throw new ApiError(400, 'Email already in use');
+  }
+
+  let referredBy;
+  const codeNorm = normalizeReferralCodeInput(referralCodeInput);
+  if (codeNorm.length >= 4) {
+    const referrer = await User.findOne({ referralCode: codeNorm, isActive: true });
+    if (!referrer) {
+      throw new ApiError(400, 'Invalid referral code');
+    }
+    if (![ROLES.CUSTOMER, ROLES.BEAUTICIAN].includes(referrer.role)) {
+      throw new ApiError(400, 'Invalid referral code');
+    }
+    if (String(referrer.email).toLowerCase() === String(email).toLowerCase()) {
+      throw new ApiError(400, 'You cannot use your own referral code');
+    }
+    referredBy = referrer._id;
   }
 
   const user = await User.create({
@@ -54,7 +72,8 @@ const register = async ({ name, email, password, phone, cityId }) => {
     password,
     phone,
     role: 'customer',
-    city: cityId
+    city: cityId,
+    ...(referredBy ? { referredBy } : {})
   });
 
   const customerProfile = await CustomerProfile.create({
@@ -71,10 +90,26 @@ const register = async ({ name, email, password, phone, cityId }) => {
 };
 
 // Self-register a new beautician (admin will later assign city/vendor and verify KYC)
-const registerBeautician = async ({ name, email, password, phone }) => {
+const registerBeautician = async ({ name, email, password, phone, referralCode: referralCodeInput }) => {
   const existing = await User.findOne({ email });
   if (existing) {
     throw new ApiError(400, 'Email already in use');
+  }
+
+  let referredBy;
+  const codeNorm = normalizeReferralCodeInput(referralCodeInput);
+  if (codeNorm.length >= 4) {
+    const referrer = await User.findOne({ referralCode: codeNorm, isActive: true });
+    if (!referrer) {
+      throw new ApiError(400, 'Invalid referral code');
+    }
+    if (![ROLES.CUSTOMER, ROLES.BEAUTICIAN].includes(referrer.role)) {
+      throw new ApiError(400, 'Invalid referral code');
+    }
+    if (String(referrer.email).toLowerCase() === String(email).toLowerCase()) {
+      throw new ApiError(400, 'You cannot use your own referral code');
+    }
+    referredBy = referrer._id;
   }
 
   const user = await User.create({
@@ -84,7 +119,8 @@ const registerBeautician = async ({ name, email, password, phone }) => {
     phone,
     role: ROLES.BEAUTICIAN,
     // City and vendor will be linked by admin later
-    isActive: true
+    isActive: true,
+    ...(referredBy ? { referredBy } : {})
   });
 
   const profilePayload = {
@@ -156,13 +192,18 @@ const getProfile = async (userId) => {
     throw new ApiError(404, 'User not found');
   }
   if (user.role === ROLES.CUSTOMER) {
+    const referralCode = await referralService.ensureReferralCodeForUser(userId);
     const cp = user.customerProfile
       ? await CustomerProfile.findById(user.customerProfile).select('walletBalance rating ratingCount').lean()
       : await CustomerProfile.findOne({ user: userId }).select('walletBalance rating ratingCount').lean();
     const walletBalance = cp?.walletBalance != null ? cp.walletBalance : 0;
     const rating = cp?.rating != null ? cp.rating : 0;
     const ratingCount = cp?.ratingCount != null ? cp.ratingCount : 0;
-    return { ...user, walletBalance, rating, ratingCount };
+    return { ...user, walletBalance, rating, ratingCount, referralCode };
+  }
+  if (user.role === ROLES.BEAUTICIAN) {
+    const referralCode = await referralService.ensureReferralCodeForUser(userId);
+    return { ...user, referralCode };
   }
   return user;
 };

@@ -51,5 +51,7 @@ router.post(
   beauticianController.uploadKycFiles
 );
 
+router.get('/referral', beauticianController.getReferral);
+
 module.exports = router;
 

@@ -59,12 +59,39 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: ''
+    },
+    /** Unique code this user shares with others (customers & beauticians). */
+    referralCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      sparse: true,
+      unique: true,
+      maxlength: 16
+    },
+    /** User who referred this account (optional). */
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
     }
   },
   {
     timestamps: true
   }
 );
+
+userSchema.pre('save', async function ensureReferralCode(next) {
+  try {
+    if (this.isNew && !this.referralCode) {
+      const { generateUniqueReferralCode } = require('../utils/referralCode');
+      this.referralCode = await generateUniqueReferralCode();
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 // Hash password before save
 userSchema.pre('save', async function hashPassword(next) {

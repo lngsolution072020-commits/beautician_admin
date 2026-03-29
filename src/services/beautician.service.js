@@ -7,6 +7,7 @@ const { APPOINTMENT_STATUS } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint } = require('../utils/location');
 const appointmentRatingService = require('./appointmentRating.service');
+const referralService = require('./referral.service');
 
 // Ensure beautician owns the appointment
 const assertBeauticianAccess = (appointment, beauticianId) => {
@@ -80,13 +81,15 @@ const startAppointment = async (beauticianId, id) => {
 
 const completeAppointment = async (beauticianId, id) => {
   await assertNoPendingBeauticianRatings(beauticianId);
-  return updateStatus(
+  const appt = await updateStatus(
     beauticianId,
     id,
     [APPOINTMENT_STATUS.IN_PROGRESS],
     APPOINTMENT_STATUS.COMPLETED,
     'completedAt'
   );
+  referralService.applyReferralRewardsOnAppointmentCompleted(appt._id).catch(() => {});
+  return appt;
 };
 
 const getPendingRatingsForBeautician = async (beauticianId) => {

@@ -1,6 +1,7 @@
 const ApiResponse = require('../utils/apiResponse');
 const catchAsync = require('../utils/catchAsync');
 const beauticianService = require('../services/beautician.service');
+const referralService = require('../services/referral.service');
 const notificationService = require('../services/notification.service');
 const Appointment = require('../models/Appointment');
 const BeauticianProfile = require('../models/BeauticianProfile');
@@ -195,6 +196,14 @@ exports.uploadKycFiles = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'KYC files uploaded',
     data: { documents }
+  });
+});
+
+exports.getReferral = catchAsync(async (req, res) => {
+  const data = await referralService.getReferralInfoForUser(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Referral',
+    data
   });
 });
 

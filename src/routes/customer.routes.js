@@ -57,5 +57,7 @@ router.post(
 );
 router.get('/invoices', validate(customerValidation.getInvoices), customerController.getInvoices);
 
+router.get('/referral', customerController.getReferral);
+
 module.exports = router;
 
