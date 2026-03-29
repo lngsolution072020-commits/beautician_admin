@@ -1,4 +1,5 @@
 const env = require('../config/env');
+const logger = require('../config/logger');
 const Service = require('../models/Service');
 const Banner = require('../models/Banner');
 const Category = require('../models/Category');
@@ -66,9 +67,72 @@ const getServiceById = async (id) => {
   return service;
 };
 
+/**
+ * Pick beautician for a new booking: optional preferred user id, else best match among
+ * isAvailable + active beauticians (same city as customer when possible, KYC approved first).
+ */
+const pickBeauticianForBooking = async (customerId, preferredBeauticianUserId) => {
+  const customer = await User.findById(customerId).select('city').lean();
+  const customerCityId = customer?.city ? String(customer.city) : null;
+
+  if (preferredBeauticianUserId) {
+    const prefId = String(preferredBeauticianUserId).trim();
+    const user = await User.findById(prefId).select('role isActive city').lean();
+    if (user && user.role === ROLES.BEAUTICIAN && user.isActive) {
+      const profile = await BeauticianProfile.findOne({ user: prefId }).populate({
+        path: 'user',
+        select: 'role isActive city',
+        match: { role: ROLES.BEAUTICIAN, isActive: true }
+      });
+      if (profile?.user && profile.kycStatus !== 'rejected') {
+        const okCity =
+          !customerCityId || !user.city || String(user.city) === customerCityId;
+        if (okCity) return profile;
+      }
+    }
+    logger.warn('Preferred beautician %s not usable; auto-assigning another expert', prefId);
+  }
+
+  const list = await BeauticianProfile.find({
+    isAvailable: true,
+    kycStatus: { $in: ['approved', 'pending'] }
+  })
+    .populate({
+      path: 'user',
+      select: 'role isActive city',
+      match: { role: ROLES.BEAUTICIAN, isActive: true }
+    })
+    .sort({ rating: -1, updatedAt: -1 })
+    .limit(120);
+
+  const cityOk = (p) =>
+    p.user && (!customerCityId || !p.user.city || String(p.user.city) === customerCityId);
+
+  const approvedInCity = list.filter((p) => p.kycStatus === 'approved' && cityOk(p));
+  if (approvedInCity.length) return approvedInCity[0];
+
+  const approvedAny = list.filter((p) => p.kycStatus === 'approved' && p.user);
+  if (approvedAny.length) return approvedAny[0];
+
+  const pendingInCity = list.filter((p) => p.kycStatus === 'pending' && cityOk(p));
+  if (pendingInCity.length) return pendingInCity[0];
+
+  const pendingAny = list.filter((p) => p.kycStatus === 'pending' && p.user);
+  return pendingAny[0] || null;
+};
+
 // Booking – ensure scheduledAt is a valid date to avoid "Invalid time value" on serialization
 const createAppointment = async (customerId, payload) => {
-  const { serviceId, scheduledAt: rawScheduledAt, address, lat, lng, price, paymentMode = 'online' } = payload;
+  const {
+    serviceId,
+    scheduledAt: rawScheduledAt,
+    address,
+    lat,
+    lng,
+    price,
+    paymentMode = 'online',
+    beauticianUserId: preferredBeauticianUserId
+  } = payload;
 
   const service = await Service.findById(serviceId);
   if (!service) throw new ApiError(404, 'Service not found');
@@ -122,25 +186,36 @@ const createAppointment = async (customerId, payload) => {
     await profile.save();
   }
 
-  // Try to auto-assign an available beautician and notify them
+  // Auto-assign beautician + FCM (type appointment_created → in-app ring + list refresh on beautician web app)
   try {
-    // Pick any available beautician profile (could be enhanced with city / distance logic)
-    const profile = await BeauticianProfile.findOne({ isAvailable: true }).populate('user');
-    if (profile && profile.user && profile.user.isActive) {
+    const profile = await pickBeauticianForBooking(customerId, preferredBeauticianUserId);
+    if (profile?.user) {
       appointment.beautician = profile.user._id;
       await appointment.save();
-
-      await notificationService.sendFCM(profile.user._id, {
+      const sent = await notificationService.sendFCM(profile.user._id, {
         title: 'New booking request',
-        body: `${service.name} booking created. Open app to view details.`,
+        body: `${service.name} — open app to view and accept.`,
         data: {
           type: 'appointment_created',
           appointmentId: String(appointment._id)
         }
       });
+      if (!sent) {
+        logger.warn(
+          'Booking %s assigned to beautician %s but FCM was not sent (token / Firebase).',
+          appointment._id,
+          profile.user._id
+        );
+      }
+    } else {
+      logger.warn(
+        'No available beautician for booking %s (customer %s). Admin can assign manually.',
+        appointment._id,
+        customerId
+      );
     }
-  } catch {
-    // notification failures or auto-assignment issues should not block booking
+  } catch (e) {
+    logger.warn('Auto-assign / notify beautician failed for booking %s: %s', appointment._id, e.message);
   }
 
   return sanitizeAppointmentForResponse(appointment);

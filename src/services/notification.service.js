@@ -13,17 +13,25 @@ function getFirebaseAdmin() {
 
 async function sendFCM(userId, { title, body, data = {} }) {
   const admin = getFirebaseAdmin();
-  if (!admin) return;
+  if (!admin) {
+    logger.warn('FCM skipped: Firebase Admin not initialized (set GOOGLE_APPLICATION_CREDENTIALS). user=%s', userId);
+    return false;
+  }
   const user = await User.findById(userId).select('fcmToken').lean();
-  if (!user?.fcmToken) return;
+  if (!user?.fcmToken) {
+    logger.warn('FCM skipped: user %s has no fcmToken (open beautician app once and allow notifications)', userId);
+    return false;
+  }
   try {
     await admin.messaging().send({
       token: user.fcmToken,
       notification: { title, body },
       data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]))
     });
+    return true;
   } catch (err) {
-    logger.warn('FCM send failed:', err.message);
+    logger.warn('FCM send failed for user %s: %s', userId, err.message);
+    return false;
   }
 }
 

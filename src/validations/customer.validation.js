@@ -32,7 +32,9 @@ const createAppointment = {
     lat: Joi.number().min(-90).max(90).required(),
     lng: Joi.number().min(-180).max(180).required(),
     price: Joi.number().positive().required(),
-    paymentMode: Joi.string().valid('online', 'cod', 'wallet').optional()
+    paymentMode: Joi.string().valid('online', 'cod', 'wallet').optional(),
+    /** Optional: assign + notify this beautician (User id) when customer chose a specific expert */
+    beauticianUserId: objectId().optional().empty('')
   })
 };
 
