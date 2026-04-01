@@ -30,6 +30,13 @@ const vendorSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    /** Platform commission (% of vendor-linked revenue, e.g. product orders), 0–100. */
+    platformCommissionPercent: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 10
     }
   },
   {

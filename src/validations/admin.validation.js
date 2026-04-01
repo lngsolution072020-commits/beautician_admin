@@ -54,6 +54,7 @@ const createVendor = {
     city: objectId().required(),
     address: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
+    platformCommissionPercent: Joi.number().min(0).max(100).optional(),
     /** Login password for admin / vendor panel (optional — random one is generated if omitted) */
     panelPassword: Joi.string().min(6).max(72).optional()
   })
@@ -83,6 +84,7 @@ const updateVendor = {
     address: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
     city: objectId().optional(),
+    platformCommissionPercent: Joi.number().min(0).max(100).optional(),
     panelPassword: Joi.string().min(6).max(72).optional()
   })
 };
@@ -237,7 +239,8 @@ const createBeautician = {
     password: Joi.string().min(6).optional(),
     phone: Joi.string().optional(),
     vendorId: objectId().required(),
-    cityId: objectId().optional()
+    cityId: objectId().optional(),
+    platformCommissionPercent: Joi.number().min(0).max(100).optional()
   })
 };
 
@@ -262,6 +265,7 @@ const updateBeautician = {
     cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional(),
     vendorId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional(),
     kycStatus: Joi.string().valid('pending', 'approved', 'rejected').optional(),
+    platformCommissionPercent: Joi.number().min(0).max(100).optional(),
     documents: Joi.array()
       .items(
         Joi.object({
@@ -306,7 +310,9 @@ const getDashboard = {};
 const getReports = {
   query: Joi.object({
     from: Joi.date().iso().optional(),
-    to: Joi.date().iso().optional()
+    to: Joi.date().iso().optional(),
+    vendorId: objectIdHex24().optional().empty(''),
+    beauticianId: objectIdHex24().optional().empty('')
   })
 };
 
@@ -423,15 +429,6 @@ const updateReferralSettings = {
     .messages({ 'object.min': 'At least one field is required' })
 };
 
-const updatePlatformCommissionSettings = {
-  body: Joi.object({
-    beauticianCommissionPercent: Joi.number().min(0).max(100).optional(),
-    vendorCommissionPercent: Joi.number().min(0).max(100).optional()
-  })
-    .min(1)
-    .messages({ 'object.min': 'At least one field is required' })
-};
-
 module.exports = {
   createCity,
   updateCity,
@@ -471,7 +468,6 @@ module.exports = {
   updateInventoryItem,
   getProductOrders,
   updateProductOrderStatus,
-  updateReferralSettings,
-  updatePlatformCommissionSettings
+  updateReferralSettings
 };
 

@@ -61,6 +61,27 @@ const appointmentSchema = new mongoose.Schema(
     },
     startedAt: Date,
     completedAt: Date,
+    /** Single-use code customer shows to beautician to begin service (plain, short-lived). */
+    serviceStartOtp: {
+      type: String,
+      default: null
+    },
+    serviceStartOtpExpiresAt: {
+      type: Date,
+      default: null
+    },
+    /** When the current beautician's accept window ends (cascade to next if still pending). */
+    offerExpiresAt: {
+      type: Date,
+      default: null
+    },
+    /** Beauticians who already received this offer (declined or timed out). */
+    passedBeauticians: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    ],
     /** Customer rates beautician (mandatory after completion) */
     ratingFromCustomer: {
       stars: { type: Number, min: 1, max: 5 },

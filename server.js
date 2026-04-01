@@ -6,6 +6,7 @@ const connectDB = require('./src/config/db');
 const env = require('./src/config/env');
 const logger = require('./src/config/logger');
 const { initFirebase } = require('./src/config/firebase');
+const { processExpiredOffers } = require('./src/services/appointmentOffer.service');
 
 const server = http.createServer(app);
 
@@ -41,8 +42,14 @@ io.on('connection', (socket) => {
 
 initFirebase();
 
+const OFFER_POLL_MS = 10_000;
+
 const start = async () => {
   await connectDB();
+
+  setInterval(() => {
+    processExpiredOffers().catch((e) => logger.warn('processExpiredOffers: %s', e.message));
+  }, OFFER_POLL_MS);
 
   server.listen(env.port, () => {
     logger.info(`Server running on port ${env.port}`);

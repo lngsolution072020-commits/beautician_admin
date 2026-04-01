@@ -12,9 +12,12 @@ const router = express.Router();
 // All beautician routes require beautician role
 router.use(authMiddleware, roleMiddleware(ROLES.BEAUTICIAN));
 
-// Appointments
-router.get('/appointments', validate(beauticianValidation.getAppointments), beauticianController.getAppointments);
+router.get('/commission', beauticianController.getMyCommission);
+
+// Appointments (static paths before /:id)
 router.get('/appointments/pending-ratings', beauticianController.getPendingRatings);
+router.get('/appointments/:id', validate(beauticianValidation.appointmentIdParam), beauticianController.getAppointmentById);
+router.get('/appointments', validate(beauticianValidation.getAppointments), beauticianController.getAppointments);
 router.post(
   '/appointments/:id/rate-customer',
   validate(beauticianValidation.rateCustomer),
@@ -22,7 +25,13 @@ router.post(
 );
 router.put('/appointments/:id/accept', validate(beauticianValidation.appointmentIdParam), beauticianController.acceptAppointment);
 router.put('/appointments/:id/reject', validate(beauticianValidation.appointmentIdParam), beauticianController.rejectAppointment);
-router.put('/appointments/:id/start', validate(beauticianValidation.appointmentIdParam), beauticianController.startAppointment);
+router.put('/appointments/:id/en-route', validate(beauticianValidation.appointmentIdParam), beauticianController.markEnRoute);
+router.put('/appointments/:id/reached', validate(beauticianValidation.appointmentIdParam), beauticianController.markReached);
+router.post(
+  '/appointments/:id/verify-service-otp',
+  validate(beauticianValidation.verifyServiceOtp),
+  beauticianController.verifyServiceOtp
+);
 router.put('/appointments/:id/complete', validate(beauticianValidation.appointmentIdParam), beauticianController.completeAppointment);
 
 // Location tracking

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const Appointment = require('../models/Appointment');
 const LocationTracking = require('../models/LocationTracking');
 const Inventory = require('../models/Inventory');
@@ -8,6 +9,7 @@ const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint } = require('../utils/location');
 const appointmentRatingService = require('./appointmentRating.service');
 const referralService = require('./referral.service');
+const appointmentOfferService = require('./appointmentOffer.service');
 
 // Ensure beautician owns the appointment
 const assertBeauticianAccess = (appointment, beauticianId) => {
@@ -23,6 +25,67 @@ async function assertNoPendingBeauticianRatings(beauticianId) {
   }
 }
 
+const getAppointmentById = async (beauticianId, id) => {
+  const appt = await Appointment.findById(id)
+    .select('-serviceStartOtp -serviceStartOtpExpiresAt')
+    .populate('customer service');
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertBeauticianAccess(appt, beauticianId);
+  return appt;
+};
+
+function generateServiceOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+const markEnRoute = async (beauticianId, id) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  return updateStatus(beauticianId, id, [APPOINTMENT_STATUS.ACCEPTED], APPOINTMENT_STATUS.IN_TRANSIT);
+};
+
+const markReached = async (beauticianId, id) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  const appt = await Appointment.findById(id);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertBeauticianAccess(appt, beauticianId);
+  if (appt.status !== APPOINTMENT_STATUS.IN_TRANSIT) {
+    throw new ApiError(400, 'Tap "Go for service" first, then mark when you arrive');
+  }
+  appt.status = APPOINTMENT_STATUS.REACHED;
+  appt.serviceStartOtp = generateServiceOtp();
+  appt.serviceStartOtpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  await appt.save();
+  return Appointment.findById(id).select('-serviceStartOtp -serviceStartOtpExpiresAt').populate('customer service');
+};
+
+const verifyServiceOtpAndStart = async (beauticianId, id, rawOtp) => {
+  await assertNoPendingBeauticianRatings(beauticianId);
+  const appt = await Appointment.findById(id);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertBeauticianAccess(appt, beauticianId);
+  if (appt.status !== APPOINTMENT_STATUS.REACHED) {
+    throw new ApiError(400, 'Ask the customer to open their booking — the code appears after you mark arrival');
+  }
+  const otp = String(rawOtp || '')
+    .replace(/\D/g, '')
+    .slice(0, 6);
+  if (otp.length !== 6) {
+    throw new ApiError(400, 'Enter the 6-digit code from the customer app');
+  }
+  if (!appt.serviceStartOtp || appt.serviceStartOtp !== otp) {
+    throw new ApiError(400, 'Invalid code. Check with the customer on their order screen.');
+  }
+  if (!appt.serviceStartOtpExpiresAt || new Date(appt.serviceStartOtpExpiresAt) < new Date()) {
+    throw new ApiError(400, 'Code expired. Mark arrival again to generate a new code.');
+  }
+  appt.status = APPOINTMENT_STATUS.IN_PROGRESS;
+  appt.startedAt = new Date();
+  appt.serviceStartOtp = null;
+  appt.serviceStartOtpExpiresAt = null;
+  await appt.save();
+  return Appointment.findById(id).populate('customer service');
+};
+
 // Appointments list for beautician
 const getAppointments = async (beauticianId, query) => {
   const { page, limit, skip } = getPagination(query);
@@ -31,6 +94,7 @@ const getAppointments = async (beauticianId, query) => {
 
   const [items, total] = await Promise.all([
     Appointment.find(filter)
+      .select('-serviceStartOtp -serviceStartOtpExpiresAt')
       .populate('customer service')
       .skip(skip)
       .limit(limit)
@@ -53,6 +117,9 @@ const updateStatus = async (beauticianId, id, allowedFromStatuses, newStatus, ti
   }
 
   appt.status = newStatus;
+  if (newStatus === APPOINTMENT_STATUS.ACCEPTED) {
+    appt.offerExpiresAt = null;
+  }
   if (timeField) {
     appt[timeField] = new Date();
   }
@@ -65,19 +132,20 @@ const acceptAppointment = async (beauticianId, id) => {
   return updateStatus(beauticianId, id, [APPOINTMENT_STATUS.PENDING], APPOINTMENT_STATUS.ACCEPTED);
 };
 
-const rejectAppointment = (beauticianId, id) =>
-  updateStatus(beauticianId, id, [APPOINTMENT_STATUS.PENDING], APPOINTMENT_STATUS.REJECTED);
-
-const startAppointment = async (beauticianId, id) => {
-  await assertNoPendingBeauticianRatings(beauticianId);
-  return updateStatus(
-    beauticianId,
-    id,
-    [APPOINTMENT_STATUS.ACCEPTED],
-    APPOINTMENT_STATUS.IN_PROGRESS,
-    'startedAt'
-  );
+const rejectAppointment = async (beauticianId, id) => {
+  const appt = await Appointment.findById(id);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertBeauticianAccess(appt, beauticianId);
+  if (appt.status !== APPOINTMENT_STATUS.PENDING) {
+    throw new ApiError(400, 'Only pending offers can be declined');
+  }
+  const result = await appointmentOfferService.passToNextBeautician(id, beauticianId);
+  if (!result.ok) {
+    throw new ApiError(400, 'Unable to update this booking');
+  }
+  return Appointment.findById(id).populate('customer service');
 };
+
 
 const completeAppointment = async (beauticianId, id) => {
   await assertNoPendingBeauticianRatings(beauticianId);
@@ -134,7 +202,14 @@ const updateLocation = async (beauticianId, { appointmentId, lat, lng }) => {
   if (!appt) throw new ApiError(404, 'Appointment not found');
   assertBeauticianAccess(appt, beauticianId);
 
-  if (![APPOINTMENT_STATUS.ACCEPTED, APPOINTMENT_STATUS.IN_PROGRESS].includes(appt.status)) {
+  if (
+    ![
+      APPOINTMENT_STATUS.ACCEPTED,
+      APPOINTMENT_STATUS.IN_TRANSIT,
+      APPOINTMENT_STATUS.REACHED,
+      APPOINTMENT_STATUS.IN_PROGRESS
+    ].includes(appt.status)
+  ) {
     throw new ApiError(400, 'Location tracking allowed only for active appointments');
   }
 
@@ -259,11 +334,22 @@ const submitKyc = async (beauticianId, documents) => {
   return getKyc(beauticianId);
 };
 
+const getMyPlatformCommission = async (beauticianUserId) => {
+  const profile = await BeauticianProfile.findOne({ user: beauticianUserId }).select('platformCommissionPercent').lean();
+  let pct = profile && profile.platformCommissionPercent;
+  if (pct == null || Number.isNaN(Number(pct))) pct = 10;
+  pct = Math.min(100, Math.max(0, Number(pct)));
+  return { beauticianCommissionPercent: pct };
+};
+
 module.exports = {
+  getAppointmentById,
   getAppointments,
   acceptAppointment,
   rejectAppointment,
-  startAppointment,
+  markEnRoute,
+  markReached,
+  verifyServiceOtpAndStart,
   completeAppointment,
   getPendingRatingsForBeautician,
   submitBeauticianRating,
@@ -273,6 +359,7 @@ module.exports = {
   getVendorInventoryForBeautician,
   setAvailability,
   getKyc,
-  submitKyc
+  submitKyc,
+  getMyPlatformCommission
 };
 

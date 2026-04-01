@@ -4,7 +4,6 @@ const ApiError = require('../utils/apiError');
 const { attachProfileImageUrl } = require('../utils/profileImage');
 const authService = require('../services/auth.service');
 const referralSettingsService = require('../services/referralSettings.service');
-const platformCommissionSettingsService = require('../services/platformCommissionSettings.service');
 
 // Register new customer
 exports.register = catchAsync(async (req, res) => {
@@ -213,12 +212,11 @@ exports.getPublicReferralSettings = catchAsync(async (req, res) => {
   });
 });
 
-/** Public: platform commission percentages (beautician vs vendor) for apps and estimates */
+/** @deprecated Legacy defaults only. Beautician app should use GET /beautician/commission (auth). Vendor rates are per vendor in admin. */
 exports.getPublicCommissionSettings = catchAsync(async (req, res) => {
-  const data = await platformCommissionSettingsService.getPlatformCommissionSettings();
   return ApiResponse.success(res, {
-    message: 'Platform commission settings',
-    data
+    message: 'Platform commission defaults (legacy)',
+    data: { beauticianCommissionPercent: 10, vendorCommissionPercent: 10 }
   });
 });
 

@@ -8,7 +8,12 @@ const logger = require('../config/logger');
 function derivePresenceStatus(isAvailable, appointmentStatus) {
   if (isAvailable === false) return 'offline';
   const s = appointmentStatus ? String(appointmentStatus) : '';
-  if (s === APPOINTMENT_STATUS.ACCEPTED || s === APPOINTMENT_STATUS.IN_PROGRESS) {
+  if (
+    s === APPOINTMENT_STATUS.ACCEPTED ||
+    s === APPOINTMENT_STATUS.IN_TRANSIT ||
+    s === APPOINTMENT_STATUS.REACHED ||
+    s === APPOINTMENT_STATUS.IN_PROGRESS
+  ) {
     return 'busy';
   }
   return 'online';

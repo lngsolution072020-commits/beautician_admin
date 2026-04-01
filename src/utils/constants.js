@@ -11,6 +11,10 @@ const APPOINTMENT_STATUS = {
   PENDING: 'pending',
   ACCEPTED: 'accepted',
   REJECTED: 'rejected',
+  /** Beautician is travelling to the customer */
+  IN_TRANSIT: 'in_transit',
+  /** Beautician at site; customer app shows OTP to start service */
+  REACHED: 'reached',
   IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled'

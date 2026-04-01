@@ -63,6 +63,13 @@ const beauticianProfileSchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'approved', 'rejected'],
       default: 'pending'
+    },
+    /** Platform fee (% of service revenue), 0–100. Set per beautician in admin. */
+    platformCommissionPercent: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 10
     }
   },
   {

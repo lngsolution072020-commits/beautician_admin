@@ -22,19 +22,28 @@ const {
 } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
 const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
-const notificationService = require('./notification.service');
 const appointmentRatingService = require('./appointmentRating.service');
+const appointmentOfferService = require('./appointmentOffer.service');
 
 // Ensure date fields are valid ISO strings so client never gets "Invalid Date" / Invalid time value
 function sanitizeAppointmentForResponse(doc) {
   const obj = doc && typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
-  const dateFields = ['scheduledAt', 'createdAt', 'updatedAt', 'startedAt', 'completedAt'];
+  const dateFields = [
+    'scheduledAt',
+    'createdAt',
+    'updatedAt',
+    'startedAt',
+    'completedAt',
+    'offerExpiresAt',
+    'serviceStartOtpExpiresAt'
+  ];
   dateFields.forEach((field) => {
     if (obj[field] != null) {
       const d = obj[field] instanceof Date ? obj[field] : new Date(obj[field]);
       obj[field] = Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
     }
   });
+  delete obj.serviceStartOtp;
   if (obj.paymentMode != null && obj.paymentMode !== '') {
     obj.paymentMode = String(obj.paymentMode).trim().toLowerCase();
   }
@@ -73,60 +82,6 @@ const getServiceById = async (id) => {
   const service = await Service.findOne({ _id: id, isActive: true }).populate('category').lean();
   if (!service) throw new ApiError(404, 'Service not found');
   return service;
-};
-
-/**
- * Pick beautician for a new booking: optional preferred user id, else best match among
- * isAvailable + active beauticians (same city as customer when possible, KYC approved first).
- */
-const pickBeauticianForBooking = async (customerId, preferredBeauticianUserId) => {
-  const customer = await User.findById(customerId).select('city').lean();
-  const customerCityId = customer?.city ? String(customer.city) : null;
-
-  if (preferredBeauticianUserId) {
-    const prefId = String(preferredBeauticianUserId).trim();
-    const user = await User.findById(prefId).select('role isActive city').lean();
-    if (user && user.role === ROLES.BEAUTICIAN && user.isActive) {
-      const profile = await BeauticianProfile.findOne({ user: prefId }).populate({
-        path: 'user',
-        select: 'role isActive city',
-        match: { role: ROLES.BEAUTICIAN, isActive: true }
-      });
-      if (profile?.user && profile.kycStatus !== 'rejected') {
-        const okCity =
-          !customerCityId || !user.city || String(user.city) === customerCityId;
-        if (okCity) return profile;
-      }
-    }
-    logger.warn('Preferred beautician %s not usable; auto-assigning another expert', prefId);
-  }
-
-  const list = await BeauticianProfile.find({
-    isAvailable: true,
-    kycStatus: { $in: ['approved', 'pending'] }
-  })
-    .populate({
-      path: 'user',
-      select: 'role isActive city',
-      match: { role: ROLES.BEAUTICIAN, isActive: true }
-    })
-    .sort({ rating: -1, updatedAt: -1 })
-    .limit(120);
-
-  const cityOk = (p) =>
-    p.user && (!customerCityId || !p.user.city || String(p.user.city) === customerCityId);
-
-  const approvedInCity = list.filter((p) => p.kycStatus === 'approved' && cityOk(p));
-  if (approvedInCity.length) return approvedInCity[0];
-
-  const approvedAny = list.filter((p) => p.kycStatus === 'approved' && p.user);
-  if (approvedAny.length) return approvedAny[0];
-
-  const pendingInCity = list.filter((p) => p.kycStatus === 'pending' && cityOk(p));
-  if (pendingInCity.length) return pendingInCity[0];
-
-  const pendingAny = list.filter((p) => p.kycStatus === 'pending' && p.user);
-  return pendingAny[0] || null;
 };
 
 // Booking – ensure scheduledAt is a valid date to avoid "Invalid time value" on serialization
@@ -194,28 +149,14 @@ const createAppointment = async (customerId, payload) => {
     await profile.save();
   }
 
-  // Auto-assign beautician + FCM (type appointment_created → in-app ring + list refresh on beautician web app)
   try {
-    const profile = await pickBeauticianForBooking(customerId, preferredBeauticianUserId);
-    if (profile?.user) {
-      appointment.beautician = profile.user._id;
-      await appointment.save();
-      const sent = await notificationService.sendFCM(profile.user._id, {
-        title: 'New booking request',
-        body: `${service.name} — open app to view and accept.`,
-        data: {
-          type: 'appointment_created',
-          appointmentId: String(appointment._id)
-        }
-      });
-      if (!sent) {
-        logger.warn(
-          'Booking %s assigned to beautician %s but FCM was not sent (token / Firebase).',
-          appointment._id,
-          profile.user._id
-        );
-      }
-    } else {
+    await appointmentOfferService.assignInitialOffer(
+      appointment,
+      customerId,
+      preferredBeauticianUserId,
+      service.name
+    );
+    if (!appointment.beautician) {
       logger.warn(
         'No available beautician for booking %s (customer %s). Admin can assign manually.',
         appointment._id,
@@ -236,6 +177,7 @@ const getAppointments = async (customerId, query) => {
 
   const [rawItems, total] = await Promise.all([
     Appointment.find(filter)
+      .select('-serviceStartOtp -serviceStartOtpExpiresAt')
       .populate('service beautician')
       .skip(skip)
       .limit(limit)
@@ -284,6 +226,17 @@ const getAppointmentById = async (customerId, id) => {
       experienceYears: profile?.experienceYears || 0
     };
   }
+  if (
+    sanitized.status === APPOINTMENT_STATUS.REACHED &&
+    appt.serviceStartOtp &&
+    appt.serviceStartOtpExpiresAt &&
+    new Date(appt.serviceStartOtpExpiresAt) > new Date()
+  ) {
+    sanitized.serviceStartOtp = appt.serviceStartOtp;
+    sanitized.serviceStartOtpExpiresAt = new Date(appt.serviceStartOtpExpiresAt).toISOString();
+  } else {
+    delete sanitized.serviceStartOtpExpiresAt;
+  }
   return sanitized;
 };
 
@@ -293,9 +246,19 @@ const cancelAppointment = async (customerId, id) => {
   if (String(appt.customer) !== String(customerId)) {
     throw new ApiError(403, 'Forbidden: appointment does not belong to customer');
   }
-  if (![APPOINTMENT_STATUS.PENDING, APPOINTMENT_STATUS.ACCEPTED].includes(appt.status)) {
-    throw new ApiError(400, 'Only pending or accepted appointments can be cancelled');
+  if (
+    ![
+      APPOINTMENT_STATUS.PENDING,
+      APPOINTMENT_STATUS.ACCEPTED,
+      APPOINTMENT_STATUS.IN_TRANSIT,
+      APPOINTMENT_STATUS.REACHED
+      // not in_progress: service already underway
+    ].includes(appt.status)
+  ) {
+    throw new ApiError(400, 'This appointment can no longer be cancelled');
   }
+  appt.serviceStartOtp = null;
+  appt.serviceStartOtpExpiresAt = null;
   appt.status = APPOINTMENT_STATUS.CANCELLED;
   await appt.save();
   return sanitizeAppointmentForResponse(appt);
@@ -309,7 +272,14 @@ const trackAppointment = async (customerId, appointmentId) => {
     throw new ApiError(403, 'Forbidden: appointment does not belong to customer');
   }
 
-  if (![APPOINTMENT_STATUS.ACCEPTED, APPOINTMENT_STATUS.IN_PROGRESS].includes(appt.status)) {
+  if (
+    ![
+      APPOINTMENT_STATUS.ACCEPTED,
+      APPOINTMENT_STATUS.IN_TRANSIT,
+      APPOINTMENT_STATUS.REACHED,
+      APPOINTMENT_STATUS.IN_PROGRESS
+    ].includes(appt.status)
+  ) {
     throw new ApiError(400, 'Tracking is allowed only for active appointments');
   }
 

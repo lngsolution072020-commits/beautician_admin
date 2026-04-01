@@ -17,6 +17,12 @@ const { ROLES, APPOINTMENT_STATUS, PAYMENT_STATUS, PRODUCT_ORDER_STATUS } = requ
 const { getDistanceInKm } = require('../utils/location');
 const notificationService = require('./notification.service');
 
+function clampPlatformCommissionPercent(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return 10;
+  return Math.min(100, Math.max(0, n));
+}
+
 /** Appointments visible to a vendor admin: same city (customer or beautician) or vendor id on booking */
 async function buildVendorAppointmentMatch(vendorScope) {
   if (!vendorScope) return {};
@@ -146,6 +152,9 @@ const updateVendor = async (id, payload) => {
   if (rest.address !== undefined) vendor.address = rest.address || '';
   if (rest.isActive !== undefined) vendor.isActive = rest.isActive;
   if (rest.city !== undefined) vendor.city = rest.city;
+  if (rest.platformCommissionPercent !== undefined) {
+    vendor.platformCommissionPercent = clampPlatformCommissionPercent(rest.platformCommissionPercent);
+  }
   await vendor.save();
 
   let linkedUser = await User.findOne({ vendor: id, role: ROLES.VENDOR });
@@ -380,6 +389,7 @@ const getBeauticianById = async (userId, vendorScope) => {
     cityId: user.city && (user.city._id || user.city).toString(),
     vendor: vendorName || '',
     vendorId: profile.vendor && (profile.vendor._id || profile.vendor).toString(),
+    platformCommissionPercent: clampPlatformCommissionPercent(profile.platformCommissionPercent),
     totalJobs,
     totalEarnings,
     walletBalance: profile.walletBalance != null ? profile.walletBalance : 0,
@@ -428,6 +438,9 @@ const updateBeautician = async (userId, payload, vendorScope) => {
   if (payload.vendorId !== undefined) profile.vendor = payload.vendorId || undefined;
 
   if (payload.kycStatus !== undefined) profile.kycStatus = payload.kycStatus;
+  if (payload.platformCommissionPercent !== undefined) {
+    profile.platformCommissionPercent = clampPlatformCommissionPercent(payload.platformCommissionPercent);
+  }
   if (Array.isArray(payload.documents) && payload.documents.length > 0) {
     payload.documents.forEach((docUpdate) => {
       if (!docUpdate || !docUpdate.id) return;
@@ -596,7 +609,7 @@ const createBeautician = async (payload, vendorScope) => {
   if (vendorScope) {
     throw new ApiError(403, 'Forbidden');
   }
-  const { name, email, password, phone, vendorId, cityId } = payload;
+  const { name, email, password, phone, vendorId, cityId, platformCommissionPercent } = payload;
   const vendor = await Vendor.findById(vendorId).populate('city');
   if (!vendor) throw new ApiError(404, 'Vendor not found');
   const existing = await User.findOne({ email });
@@ -614,7 +627,10 @@ const createBeautician = async (payload, vendorScope) => {
 
   const beauticianProfile = await BeauticianProfile.create({
     user: user._id,
-    vendor: vendorId
+    vendor: vendorId,
+    ...(platformCommissionPercent !== undefined
+      ? { platformCommissionPercent: clampPlatformCommissionPercent(platformCommissionPercent) }
+      : {})
   });
 
   user.beauticianProfile = beauticianProfile._id;
@@ -991,7 +1007,38 @@ const getReports = async (query, vendorScope) => {
     }
   }
 
-  if (vendorScope) {
+  const qVendorId = query.vendorId;
+  const qBeauticianId = query.beauticianId;
+  const appointmentFilter = {};
+  if (qVendorId) appointmentFilter.vendor = qVendorId;
+  if (qBeauticianId) appointmentFilter.beautician = qBeauticianId;
+
+  if (Object.keys(appointmentFilter).length > 0) {
+    let apptIds = (await Appointment.find(appointmentFilter).select('_id').lean()).map((a) => a._id);
+
+    if (vendorScope) {
+      if (qVendorId && String(qVendorId) !== String(vendorScope.vendorId)) {
+        throw new ApiError(403, 'Forbidden');
+      }
+      if (qBeauticianId) {
+        const bu = await User.findById(qBeauticianId).select('city role').lean();
+        if (!bu || bu.role !== ROLES.BEAUTICIAN) throw new ApiError(404, 'Beautician not found');
+        if (String(bu.city) !== String(vendorScope.cityId)) throw new ApiError(403, 'Forbidden');
+      }
+      const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
+      const scopedIds = (await Appointment.find(scopeMatch).select('_id').lean()).map((a) => a._id);
+      const scopedSet = new Set(scopedIds.map((id) => String(id)));
+      apptIds = apptIds.filter((id) => scopedSet.has(String(id)));
+    } else if (qBeauticianId) {
+      const bu = await User.findById(qBeauticianId).select('role').lean();
+      if (!bu || bu.role !== ROLES.BEAUTICIAN) throw new ApiError(404, 'Beautician not found');
+    }
+
+    if (apptIds.length === 0) {
+      return { payments: [] };
+    }
+    match.appointment = { $in: apptIds };
+  } else if (vendorScope) {
     const scopeMatch = await buildVendorAppointmentMatch(vendorScope);
     const scopedApptIds = (await Appointment.find(scopeMatch).select('_id').lean()).map((a) => a._id);
     const cityUserIds = (await User.find({ city: vendorScope.cityId }).select('_id').lean()).map((u) => u._id);

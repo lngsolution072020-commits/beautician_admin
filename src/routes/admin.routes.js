@@ -94,13 +94,4 @@ router.get('/reports', validate(adminValidation.getReports), adminController.get
 router.get('/referral-settings', superAdminOnly, adminController.getReferralSettings);
 router.put('/referral-settings', superAdminOnly, validate(adminValidation.updateReferralSettings), adminController.updateReferralSettings);
 
-// Platform commission — super admin only
-router.get('/commission-settings', superAdminOnly, adminController.getPlatformCommissionSettings);
-router.put(
-  '/commission-settings',
-  superAdminOnly,
-  validate(adminValidation.updatePlatformCommissionSettings),
-  adminController.updatePlatformCommissionSettings
-);
-
 module.exports = router;

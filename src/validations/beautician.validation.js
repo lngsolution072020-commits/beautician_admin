@@ -17,6 +17,15 @@ const appointmentIdParam = {
   })
 };
 
+const verifyServiceOtp = {
+  params: Joi.object({
+    id: objectId().required()
+  }),
+  body: Joi.object({
+    otp: Joi.string().length(6).pattern(/^\d+$/).required()
+  })
+};
+
 const rateCustomer = {
   params: Joi.object({
     id: objectId().required()
@@ -77,6 +86,7 @@ const submitKyc = {
 module.exports = {
   getAppointments,
   appointmentIdParam,
+  verifyServiceOtp,
   rateCustomer,
   updateLocation,
   locationHistory,

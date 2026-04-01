@@ -39,12 +39,24 @@ exports.getAppointments = catchAsync(async (req, res) => {
   });
 });
 
+exports.getAppointmentById = catchAsync(async (req, res) => {
+  const appt = await beauticianService.getAppointmentById(req.user.id, req.params.id);
+  const obj = appt.toObject ? appt.toObject() : appt;
+  if (obj.service && obj.service.imageUrl && !obj.service.imageUrl.startsWith('http')) {
+    obj.service.imageUrl = buildFileUrl(req, 'services', obj.service.imageUrl);
+  }
+  return ApiResponse.success(res, {
+    message: 'Appointment details',
+    data: obj
+  });
+});
+
 exports.acceptAppointment = catchAsync(async (req, res) => {
   const appt = await beauticianService.acceptAppointment(req.user.id, req.params.id);
   if (appt?.customer) {
     notificationService.sendFCM(appt.customer._id || appt.customer, {
       title: 'Booking accepted',
-      body: 'Your beautician has accepted the booking and is on the way.',
+      body: 'Your beautician has accepted the booking. Track progress in the app.',
       data: { type: 'appointment_accepted', appointmentId: String(appt._id) }
     }).catch(() => {});
   }
@@ -56,14 +68,47 @@ exports.acceptAppointment = catchAsync(async (req, res) => {
 
 exports.rejectAppointment = catchAsync(async (req, res) => {
   const appt = await beauticianService.rejectAppointment(req.user.id, req.params.id);
+  const stillPending = appt?.status === 'pending';
   return ApiResponse.success(res, {
-    message: 'Appointment rejected',
+    message: stillPending
+      ? 'Offer passed to another beautician'
+      : 'Booking could not be assigned; customer has been notified',
     data: appt
   });
 });
 
-exports.startAppointment = catchAsync(async (req, res) => {
-  const appt = await beauticianService.startAppointment(req.user.id, req.params.id);
+exports.markEnRoute = catchAsync(async (req, res) => {
+  const appt = await beauticianService.markEnRoute(req.user.id, req.params.id);
+  if (appt?.customer) {
+    notificationService.sendFCM(appt.customer._id || appt.customer, {
+      title: 'Expert on the way',
+      body: 'Your beautician is travelling to your location. You can track live in the app.',
+      data: { type: 'appointment_en_route', appointmentId: String(appt._id) }
+    }).catch(() => {});
+  }
+  return ApiResponse.success(res, {
+    message: 'Status updated',
+    data: appt
+  });
+});
+
+exports.markReached = catchAsync(async (req, res) => {
+  const appt = await beauticianService.markReached(req.user.id, req.params.id);
+  if (appt?.customer) {
+    notificationService.sendFCM(appt.customer._id || appt.customer, {
+      title: 'Beautician has arrived',
+      body: 'Open your order and share the service code with your expert to begin.',
+      data: { type: 'appointment_reached', appointmentId: String(appt._id) }
+    }).catch(() => {});
+  }
+  return ApiResponse.success(res, {
+    message: 'Arrival saved. Customer can see the code in their app.',
+    data: appt
+  });
+});
+
+exports.verifyServiceOtp = catchAsync(async (req, res) => {
+  const appt = await beauticianService.verifyServiceOtpAndStart(req.user.id, req.params.id, req.body.otp);
   if (appt?.customer) {
     notificationService.sendFCM(appt.customer._id || appt.customer, {
       title: 'Service started',
@@ -72,7 +117,7 @@ exports.startAppointment = catchAsync(async (req, res) => {
     }).catch(() => {});
   }
   return ApiResponse.success(res, {
-    message: 'Appointment started',
+    message: 'Service started',
     data: appt
   });
 });
@@ -203,6 +248,15 @@ exports.getReferral = catchAsync(async (req, res) => {
   const data = await referralService.getReferralInfoForUser(req.user.id);
   return ApiResponse.success(res, {
     message: 'Referral',
+    data
+  });
+});
+
+/** Per-beautician platform fee % (from admin). */
+exports.getMyCommission = catchAsync(async (req, res) => {
+  const data = await beauticianService.getMyPlatformCommission(req.user.id);
+  return ApiResponse.success(res, {
+    message: 'Commission',
     data
   });
 });
