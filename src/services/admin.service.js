@@ -287,9 +287,22 @@ const getBeauticians = async (query, vendorScope) => {
   const cityFilter = vendorScope ? String(vendorScope.cityId) : query.cityId;
   if (cityFilter) userMatch.city = cityFilter;
 
-  const userIds = await User.find(userMatch).select('_id').lean();
-  const userIdList = userIds.map((u) => u._id);
-  const profileFilter = { user: { $in: userIdList } };
+  let profileFilter;
+  if (query.vendorId) {
+    profileFilter = { vendor: query.vendorId };
+    if (query.search || cityFilter) {
+      const userIds = await User.find(userMatch).select('_id').lean();
+      const userIdList = userIds.map((u) => u._id);
+      if (userIdList.length === 0) {
+        return { items: [], meta: getMeta({ page, limit, total: 0 }) };
+      }
+      profileFilter.user = { $in: userIdList };
+    }
+  } else {
+    const userIds = await User.find(userMatch).select('_id').lean();
+    const userIdList = userIds.map((u) => u._id);
+    profileFilter = { user: { $in: userIdList } };
+  }
   const totalCount = await BeauticianProfile.countDocuments(profileFilter);
 
   const items = await BeauticianProfile.find(profileFilter)
@@ -1011,8 +1024,15 @@ const getReports = async (query, vendorScope) => {
   const qVendorId = query.vendorId;
   const qBeauticianId = query.beauticianId;
   const appointmentFilter = {};
-  if (qVendorId) appointmentFilter.vendor = qVendorId;
-  if (qBeauticianId) appointmentFilter.beautician = qBeauticianId;
+  if (qVendorId && qBeauticianId) {
+    appointmentFilter.vendor = qVendorId;
+    appointmentFilter.beautician = qBeauticianId;
+  } else if (qVendorId) {
+    const vendorBeauticianUserIds = await BeauticianProfile.find({ vendor: qVendorId }).distinct('user');
+    appointmentFilter.$or = [{ vendor: qVendorId }, { beautician: { $in: vendorBeauticianUserIds } }];
+  } else if (qBeauticianId) {
+    appointmentFilter.beautician = qBeauticianId;
+  }
 
   if (Object.keys(appointmentFilter).length > 0) {
     let apptIds = (await Appointment.find(appointmentFilter).select('_id').lean()).map((a) => a._id);
@@ -1142,8 +1162,15 @@ const getAppointments = async (query, vendorScope) => {
   const base = {};
   if (query.status) base.status = query.status;
   if (query.customerId) base.customer = query.customerId;
-  if (query.beauticianId) base.beautician = query.beauticianId;
-  if (query.vendorId) base.vendor = query.vendorId;
+  if (query.vendorId && query.beauticianId) {
+    base.vendor = query.vendorId;
+    base.beautician = query.beauticianId;
+  } else if (query.vendorId) {
+    const vendorBeauticianUserIds = await BeauticianProfile.find({ vendor: query.vendorId }).distinct('user');
+    base.$or = [{ vendor: query.vendorId }, { beautician: { $in: vendorBeauticianUserIds } }];
+  } else if (query.beauticianId) {
+    base.beautician = query.beauticianId;
+  }
 
   let filter = base;
   if (vendorScope) {
@@ -1282,6 +1309,12 @@ const updateAppointment = async (id, payload, vendorScope) => {
 
   if (payload.beautician !== undefined) {
     appointment.beautician = payload.beautician || null;
+    if (appointment.beautician) {
+      const bp = await BeauticianProfile.findOne({ user: appointment.beautician }).select('vendor').lean();
+      appointment.vendor = bp?.vendor || null;
+    } else {
+      appointment.vendor = null;
+    }
 
     // When admin assigns a beautician for a pending booking, mark it as accepted
     if (appointment.beautician && appointment.status === APPOINTMENT_STATUS.PENDING) {

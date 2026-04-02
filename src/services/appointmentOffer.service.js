@@ -49,6 +49,7 @@ async function assignInitialOffer(appointmentDoc, customerId, preferredBeauticia
       return null;
     }
     appointmentDoc.beautician = profile.user._id;
+    if (profile.vendor) appointmentDoc.vendor = profile.vendor;
     appointmentDoc.offerExpiresAt = new Date(Date.now() + OFFER_MS);
     appointmentDoc.passedBeauticians = [];
     await appointmentDoc.save();
@@ -85,6 +86,7 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
 
   if (profile?.user) {
     appt.beautician = profile.user._id;
+    if (profile.vendor) appt.vendor = profile.vendor;
     appt.offerExpiresAt = new Date(Date.now() + OFFER_MS);
     await appt.save();
     let serviceName = 'Service';
@@ -106,6 +108,7 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
   }
 
   appt.set('beautician', null);
+  appt.set('vendor', null);
   appt.offerExpiresAt = null;
   appt.status = APPOINTMENT_STATUS.CANCELLED;
   await appt.save();

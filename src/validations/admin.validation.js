@@ -226,9 +226,10 @@ const updateService = {
 const getBeauticians = {
   query: Joi.object({
     page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
+    limit: Joi.number().integer().min(1).max(200).optional(),
     search: Joi.string().optional().empty(''),
-    cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional().custom((v) => (v === '' ? undefined : v))
+    cityId: Joi.alternatives().try(objectId(), Joi.string().valid('')).optional().custom((v) => (v === '' ? undefined : v)),
+    vendorId: objectId().optional().empty('')
   })
 };
 
