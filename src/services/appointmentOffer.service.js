@@ -9,23 +9,33 @@ const OFFER_MS = 30_000;
 
 async function notifyOfferFCM(appt, serviceName) {
   if (!appt?.beautician) return false;
-  const sent = await notificationService.sendFCM(appt.beautician, {
-    title: 'New booking request',
-    body: `${serviceName} — accept within 30 seconds or it passes to the next expert.`,
-    data: {
-      type: 'appointment_created',
-      appointmentId: String(appt._id),
-      offerExpiresAt: appt.offerExpiresAt ? new Date(appt.offerExpiresAt).toISOString() : ''
+  try {
+    const sent = await notificationService.sendFCM(appt.beautician, {
+      title: 'New booking request',
+      body: `${serviceName} — accept within 30 seconds or it passes to the next expert.`,
+      data: {
+        type: 'appointment_created',
+        appointmentId: String(appt._id),
+        offerExpiresAt: appt.offerExpiresAt ? new Date(appt.offerExpiresAt).toISOString() : ''
+      }
+    });
+    if (!sent) {
+      logger.warn(
+        'Booking %s offered to beautician %s but FCM was not sent.',
+        appt._id,
+        appt.beautician
+      );
     }
-  });
-  if (!sent) {
+    return sent;
+  } catch (e) {
     logger.warn(
-      'Booking %s offered to beautician %s but FCM was not sent.',
+      'Booking %s offer notification failed for beautician %s: %s',
       appt._id,
-      appt.beautician
+      appt.beautician,
+      e && e.message ? e.message : 'unknown error'
     );
+    return false;
   }
-  return sent;
 }
 
 /**
@@ -77,8 +87,14 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
     appt.beautician = profile.user._id;
     appt.offerExpiresAt = new Date(Date.now() + OFFER_MS);
     await appt.save();
-    const service = await Service.findById(appt.service).select('name').lean();
-    await notifyOfferFCM(appt, service?.name || 'Service');
+    let serviceName = 'Service';
+    try {
+      const service = await Service.findById(appt.service).select('name').lean();
+      serviceName = service?.name || 'Service';
+    } catch (e) {
+      logger.warn('Service lookup failed for booking %s: %s', appt._id, e.message);
+    }
+    await notifyOfferFCM(appt, serviceName);
     notificationService
       .sendFCM(customerId, {
         title: 'Finding another expert',

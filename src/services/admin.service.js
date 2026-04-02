@@ -152,6 +152,7 @@ const updateVendor = async (id, payload) => {
   if (rest.address !== undefined) vendor.address = rest.address || '';
   if (rest.isActive !== undefined) vendor.isActive = rest.isActive;
   if (rest.city !== undefined) vendor.city = rest.city;
+  // Vendor commission: % of beauticians' earnings credited to this vendor (see Vendor model).
   if (rest.platformCommissionPercent !== undefined) {
     vendor.platformCommissionPercent = clampPlatformCommissionPercent(rest.platformCommissionPercent);
   }
@@ -1142,6 +1143,7 @@ const getAppointments = async (query, vendorScope) => {
   if (query.status) base.status = query.status;
   if (query.customerId) base.customer = query.customerId;
   if (query.beauticianId) base.beautician = query.beauticianId;
+  if (query.vendorId) base.vendor = query.vendorId;
 
   let filter = base;
   if (vendorScope) {

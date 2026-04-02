@@ -31,7 +31,11 @@ const vendorSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
-    /** Platform commission (% of vendor-linked revenue, e.g. product orders), 0–100. */
+    /**
+     * Vendor commission: % of each beautician's earnings (under this vendor) credited to the vendor.
+     * Example: 15 means the vendor receives 15% of what their beauticians earn from completed services.
+     * 0–100.
+     */
     platformCommissionPercent: {
       type: Number,
       min: 0,

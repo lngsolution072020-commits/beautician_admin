@@ -331,7 +331,8 @@ const getAppointments = {
     limit: Joi.number().integer().min(1).max(100).optional(),
     status: Joi.string().optional().empty(''),
     customerId: objectId().optional(),
-    beauticianId: objectId().optional()
+    beauticianId: objectId().optional(),
+    vendorId: objectId().optional()
   })
 };
 
