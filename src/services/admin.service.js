@@ -508,7 +508,15 @@ const getUsers = async (query, vendorScope) => {
     User.countDocuments(filter)
   ]);
   const userIds = items.map((u) => u._id);
-  const [beauticianProfiles, bookingsByCustomer, spentByCustomer, completedByBeautician] = await Promise.all([
+  const [
+    beauticianProfiles,
+    bookingsByCustomer,
+    spentCompletedByCustomer,
+    bookedValueByCustomer,
+    paidByCustomer,
+    completedByBeautician,
+    earningsByBeautician
+  ] = await Promise.all([
     BeauticianProfile.find({ user: { $in: userIds } }).lean(),
     Appointment.aggregate([
       {
@@ -529,19 +537,53 @@ const getUsers = async (query, vendorScope) => {
       { $group: { _id: '$customer', total: { $sum: '$price' } } }
     ]),
     Appointment.aggregate([
+      {
+        $match: {
+          customer: { $in: userIds },
+          status: { $nin: [APPOINTMENT_STATUS.CANCELLED, APPOINTMENT_STATUS.REJECTED] }
+        }
+      },
+      { $group: { _id: '$customer', total: { $sum: '$price' } } }
+    ]),
+    Payment.aggregate([
+      {
+        $match: {
+          customer: { $in: userIds },
+          status: PAYMENT_STATUS.PAID,
+          paymentType: { $in: ['appointment', 'product_order'] }
+        }
+      },
+      { $group: { _id: '$customer', total: { $sum: '$amount' } } }
+    ]),
+    Appointment.aggregate([
       { $match: { beautician: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
       { $group: { _id: '$beautician', count: { $sum: 1 } } }
+    ]),
+    Appointment.aggregate([
+      { $match: { beautician: { $in: userIds }, status: APPOINTMENT_STATUS.COMPLETED } },
+      { $group: { _id: '$beautician', total: { $sum: '$price' } } }
     ])
   ]);
   const profileByUser = Object.fromEntries((beauticianProfiles || []).map((p) => [p.user.toString(), p]));
   const bookingsMap = Object.fromEntries((bookingsByCustomer || []).map((c) => [c._id.toString(), c.count]));
-  const spentMap = Object.fromEntries((spentByCustomer || []).map((s) => [s._id.toString(), s.total]));
+  const spentCompletedMap = Object.fromEntries((spentCompletedByCustomer || []).map((s) => [s._id.toString(), s.total]));
+  const bookedValueMap = Object.fromEntries((bookedValueByCustomer || []).map((s) => [s._id.toString(), s.total]));
+  const paidMap = Object.fromEntries((paidByCustomer || []).map((s) => [s._id.toString(), s.total]));
   const beauticianJobsMap = Object.fromEntries((completedByBeautician || []).map((c) => [c._id.toString(), c.count]));
+  const earningsMap = Object.fromEntries((earningsByBeautician || []).map((e) => [e._id.toString(), e.total]));
 
   const formatted = items.map((u) => {
     const uid = u._id.toString();
     const profile = profileByUser[uid];
     const cityName = u.city && (typeof u.city === 'object' ? u.city.name : u.city);
+    const paidTotal = paidMap[uid] || 0;
+    const customerSpend =
+      u.role === ROLES.CUSTOMER
+        ? paidTotal > 0
+          ? paidTotal
+          : bookedValueMap[uid] || spentCompletedMap[uid] || 0
+        : undefined;
+
     return {
       _id: uid,
       id: uid,
@@ -553,7 +595,8 @@ const getUsers = async (query, vendorScope) => {
       isActive: u.isActive !== false,
       totalBookings: u.role === ROLES.CUSTOMER ? (bookingsMap[uid] || 0) : undefined,
       totalJobs: u.role === ROLES.BEAUTICIAN ? (beauticianJobsMap[uid] || 0) : undefined,
-      totalSpent: u.role === ROLES.CUSTOMER ? (spentMap[uid] || 0) : undefined,
+      totalSpent: customerSpend,
+      totalEarnings: u.role === ROLES.BEAUTICIAN ? earningsMap[uid] || 0 : undefined,
       rating: profile ? (profile.rating != null ? profile.rating : 0) : undefined,
       walletBalance: profile ? (profile.walletBalance != null ? profile.walletBalance : 0) : undefined,
       createdAt: u.createdAt
