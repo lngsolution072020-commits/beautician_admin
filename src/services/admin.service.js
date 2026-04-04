@@ -254,11 +254,25 @@ const getServices = async (query) => {
   if (query.search) {
     filter.name = { $regex: query.search, $options: 'i' };
   }
-  const [items, total] = await Promise.all([
+  /** Active = not explicitly false (matches customer/admin UI: isActive !== false) */
+  const activeFilter = { ...filter, isActive: { $ne: false } };
+  const [items, total, activeTotal, avgAgg] = await Promise.all([
     Service.find(filter).populate('category').skip(skip).limit(limit).sort({ createdAt: -1 }),
-    Service.countDocuments(filter)
+    Service.countDocuments(filter),
+    Service.countDocuments(activeFilter),
+    Service.aggregate([
+      { $match: filter },
+      { $group: { _id: null, avgPrice: { $avg: '$basePrice' } } }
+    ])
   ]);
-  return { items, meta: getMeta({ page, limit, total }) };
+  const avgBasePrice =
+    avgAgg[0] && typeof avgAgg[0].avgPrice === 'number' && !Number.isNaN(avgAgg[0].avgPrice)
+      ? Math.round(avgAgg[0].avgPrice)
+      : 0;
+  return {
+    items,
+    meta: { ...getMeta({ page, limit, total }), activeTotal, avgBasePrice }
+  };
 };
 
 const updateService = async (id, payload) => {
