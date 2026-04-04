@@ -11,6 +11,17 @@ const getServices = {
   })
 };
 
+const getServicesByCategory = {
+  params: Joi.object({
+    categoryId: objectId().required()
+  }),
+  query: Joi.object({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    search: Joi.string().optional().empty('')
+  })
+};
+
 const serviceIdParam = {
   params: Joi.object({
     id: objectId().required()
@@ -142,6 +153,7 @@ const rateAppointment = {
 
 module.exports = {
   getServices,
+  getServicesByCategory,
   serviceIdParam,
   beauticianUserIdParam,
   createAppointment,

@@ -72,6 +72,28 @@ exports.getServices = catchAsync(async (req, res) => {
   });
 });
 
+exports.getServicesByCategory = catchAsync(async (req, res) => {
+  const { category, items, meta } = await customerService.getServicesByCategoryId(
+    req.params.categoryId,
+    req.query
+  );
+  const catObj = category.toObject ? category.toObject() : { ...category };
+  if (catObj.imageUrl && !catObj.imageUrl.startsWith('http')) {
+    catObj.imageUrl = buildFileUrl(req, 'categories', catObj.imageUrl);
+  }
+  const mapped = items.map((s) => {
+    const obj = s.toObject ? s.toObject() : s;
+    if (obj.imageUrl && !obj.imageUrl.startsWith('http')) {
+      obj.imageUrl = buildFileUrl(req, 'services', obj.imageUrl);
+    }
+    return obj;
+  });
+  return ApiResponse.success(res, {
+    message: 'Services fetched for category',
+    data: { category: catObj, items: mapped, meta }
+  });
+});
+
 exports.getServiceById = catchAsync(async (req, res) => {
   const service = await customerService.getServiceById(req.params.id);
   const obj = service.toObject ? service.toObject() : { ...service };

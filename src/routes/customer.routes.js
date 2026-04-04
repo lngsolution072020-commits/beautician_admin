@@ -14,6 +14,11 @@ router.use(authMiddleware, roleMiddleware(ROLES.CUSTOMER));
 // Banners & Categories (for home)
 router.get('/banners', customerController.getBanners);
 router.get('/categories', customerController.getCategories);
+router.get(
+  '/categories/:categoryId/services',
+  validate(customerValidation.getServicesByCategory),
+  customerController.getServicesByCategory
+);
 
 router.get(
   '/beauticians/:id/summary',

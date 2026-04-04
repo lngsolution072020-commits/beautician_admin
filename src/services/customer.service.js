@@ -78,6 +78,25 @@ const getServices = async (query) => {
   return { items, meta: getMeta({ page, limit, total }) };
 };
 
+/** Active services for one category (customer app — category tap flow) */
+const getServicesByCategoryId = async (categoryId, query) => {
+  const category = await Category.findOne({ _id: categoryId, isActive: true }).lean();
+  if (!category) throw new ApiError(404, 'Category not found');
+
+  const { page, limit, skip } = getPagination(query);
+  const filter = { isActive: true, category: categoryId };
+  if (query.search) {
+    filter.name = { $regex: query.search, $options: 'i' };
+  }
+
+  const [items, total] = await Promise.all([
+    Service.find(filter).populate('category').skip(skip).limit(limit).sort({ createdAt: -1 }),
+    Service.countDocuments(filter)
+  ]);
+
+  return { category, items, meta: getMeta({ page, limit, total }) };
+};
+
 const getServiceById = async (id) => {
   const service = await Service.findOne({ _id: id, isActive: true }).populate('category').lean();
   if (!service) throw new ApiError(404, 'Service not found');
@@ -806,6 +825,7 @@ module.exports = {
   getBanners,
   getCategories,
   getServices,
+  getServicesByCategoryId,
   getServiceById,
   createAppointment,
   getBeauticianSummaryForCustomer,
