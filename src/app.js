@@ -9,10 +9,25 @@ const env = require('./config/env');
 
 const app = express();
 
+// Configure explicit allowed origins for secure credential support
+const allowedOrigins = [
+  'https://novabeautician.vercel.app',
+  'https://novaadmin-alpha.vercel.app',
+  'https://nova-rho-lemon.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175'
+];
+
 // Manual CORS middleware to bypass any package configuration edge cases
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '*';
-  res.header('Access-Control-Allow-Origin', origin);
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    // Fallback for tools like Postman
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
   res.header('Access-Control-Allow-Credentials', 'true');
