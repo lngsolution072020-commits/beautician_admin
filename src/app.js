@@ -12,12 +12,15 @@ const app = express();
 // Middlewares — explicit CORS so browsers send GET after preflight (Authorization header)
 app.use(
   cors({
-    origin: true,
+    origin: function(origin, callback) {
+      // Allow all origins
+      callback(null, true);
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
     exposedHeaders: ['Content-Type'],
     optionsSuccessStatus: 204,
-    maxAge: 86400,
   })
 );
 app.use(express.json());
