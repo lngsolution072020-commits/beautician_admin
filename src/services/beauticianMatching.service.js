@@ -1,6 +1,10 @@
 const logger = require('../config/logger');
 const BeauticianProfile = require('../models/BeauticianProfile');
 const User = require('../models/User');
+const LocationTracking = require('../models/LocationTracking');
+const Vendor = require('../models/Vendor');
+const SystemSettings = require('../models/SystemSettings');
+const { getDistanceInKm } = require('../utils/location');
 const { ROLES } = require('../utils/constants');
 
 const firstNotExcluded = (list, excludeSet) => {
@@ -16,7 +20,7 @@ const firstNotExcluded = (list, excludeSet) => {
  * @param {string|null} preferredBeauticianUserId
  * @param {string[]} excludeUserIds – never offer to these user ids (already passed / timed out)
  */
-const pickBeauticianForBooking = async (customerId, preferredBeauticianUserId, excludeUserIds = []) => {
+const pickBeauticianForBooking = async (customerId, preferredBeauticianUserId, excludeUserIds = [], appointmentLocation = null) => {
   const excludeSet = new Set((excludeUserIds || []).map(String).filter(Boolean));
 
   const customer = await User.findById(customerId).select('city').lean();
@@ -55,20 +59,63 @@ const pickBeauticianForBooking = async (customerId, preferredBeauticianUserId, e
   const cityOk = (p) =>
     p.user && (!customerCityId || !p.user.city || String(p.user.city) === customerCityId);
 
-  const approvedInCity = list.filter((_p) => _p.kycStatus === 'approved' && cityOk(_p));
-  const fromApproved = firstNotExcluded(approvedInCity, excludeSet);
-  if (fromApproved) return fromApproved;
+  // Exclude beauticians not in the same city or already tried
+  const potentialList = list.filter((p) => cityOk(p) && !excludeSet.has(String(p.user._id)));
 
-  const approvedAny = list.filter((_p) => _p.kycStatus === 'approved' && _p.user);
-  const fromApprovedAny = firstNotExcluded(approvedAny, excludeSet);
-  if (fromApprovedAny) return fromApprovedAny;
+  let maxDistanceKm = 10;
+  const settings = await SystemSettings.findOne().lean();
+  if (settings && settings.beauticianMaxDistanceKm) maxDistanceKm = settings.beauticianMaxDistanceKm;
 
-  const pendingInCity = list.filter((_p) => _p.kycStatus === 'pending' && cityOk(_p));
-  const fromPending = firstNotExcluded(pendingInCity, excludeSet);
-  if (fromPending) return fromPending;
+  let distanceFilteredList = potentialList;
 
-  const pendingAny = list.filter((_p) => _p.kycStatus === 'pending' && _p.user);
-  return firstNotExcluded(pendingAny, excludeSet) || null;
+  if (appointmentLocation && appointmentLocation.coordinates) {
+    const [apptLng, apptLat] = appointmentLocation.coordinates;
+    const beauticianUserIds = potentialList.map((p) => p.user._id);
+
+    // Get latest location tracking for these beauticians
+    const latestLocations = await LocationTracking.aggregate([
+      { $match: { beautician: { $in: beauticianUserIds } } },
+      { $sort: { recordedAt: -1 } },
+      { $group: { _id: '$beautician', location: { $first: '$location' } } }
+    ]);
+    const locationMap = {};
+    latestLocations.forEach((ll) => { locationMap[String(ll._id)] = ll.location; });
+
+    // Also get Vendor locations to fallback if tracking is not there
+    const vendorIds = [...new Set(potentialList.map((p) => p.vendor).filter(Boolean))];
+    const vendors = await Vendor.find({ _id: { $in: vendorIds } }).lean();
+    const vendorMap = {};
+    vendors.forEach((v) => { vendorMap[String(v._id)] = v; });
+
+    distanceFilteredList = [];
+    for (const p of potentialList) {
+      let bLoc = locationMap[String(p.user._id)];
+      if (!bLoc || !bLoc.coordinates) {
+        if (p.vendor && vendorMap[String(p.vendor)]) {
+          const v = vendorMap[String(p.vendor)];
+          if (v.latitude && v.longitude) {
+            bLoc = { coordinates: [v.longitude, v.latitude] };
+          }
+        }
+      }
+
+      if (bLoc && bLoc.coordinates) {
+        const dist = getDistanceInKm({ coordinates: [apptLng, apptLat] }, bLoc);
+        if (dist !== null && dist <= maxDistanceKm) {
+          distanceFilteredList.push(p);
+        }
+      } else {
+        // If we don't have ANY location info, assume ok as they are in the same city
+        distanceFilteredList.push(p);
+      }
+    }
+  }
+
+  const approvedInCity = distanceFilteredList.find((p) => p.kycStatus === 'approved');
+  if (approvedInCity) return approvedInCity;
+
+  const pendingInCity = distanceFilteredList.find((p) => p.kycStatus === 'pending');
+  return pendingInCity || null;
 };
 
 module.exports = {

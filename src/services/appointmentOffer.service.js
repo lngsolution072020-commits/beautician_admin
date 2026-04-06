@@ -45,7 +45,7 @@ async function notifyOfferFCM(appt, serviceName) {
  */
 async function assignInitialOffer(appointmentDoc, customerId, preferredBeauticianUserId, serviceName) {
   try {
-    const profile = await pickBeauticianForBooking(customerId, preferredBeauticianUserId, []);
+    const profile = await pickBeauticianForBooking(customerId, preferredBeauticianUserId, [], appointmentDoc.location);
     if (!profile?.user) {
       logger.warn('No available beautician for booking %s (customer %s).', appointmentDoc._id, customerId);
       return null;
@@ -84,7 +84,7 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
 
   const excludeIds = [...new Set([...appt.passedBeauticians.map(String), fromId])];
   const customerId = appt.customer;
-  const profile = await pickBeauticianForBooking(customerId, null, excludeIds);
+  const profile = await pickBeauticianForBooking(customerId, null, excludeIds, appt.location);
 
   if (profile?.user) {
     appt.beautician = profile.user._id;

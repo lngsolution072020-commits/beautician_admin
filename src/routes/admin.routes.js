@@ -94,4 +94,8 @@ router.get('/reports', validate(adminValidation.getReports), adminController.get
 router.get('/referral-settings', superAdminOnly, adminController.getReferralSettings);
 router.put('/referral-settings', superAdminOnly, validate(adminValidation.updateReferralSettings), adminController.updateReferralSettings);
 
+// System Settings — super admin only
+router.get('/system-settings', superAdminOnly, adminController.getSystemSettings);
+router.put('/system-settings', superAdminOnly, adminController.updateSystemSettings);
+
 module.exports = router;
