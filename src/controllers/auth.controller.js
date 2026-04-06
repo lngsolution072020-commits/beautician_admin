@@ -174,9 +174,11 @@ exports.deleteAccount = catchAsync(async (req, res) => {
   });
 });
 
-// Register FCM token for push notifications
+// Register FCM token for push notifications (body.token or body.fcmToken)
 exports.updateFcmToken = catchAsync(async (req, res) => {
-  await authService.updateFcmToken(req.user.id, req.body.token);
+  const raw = req.body.token || req.body.fcmToken;
+  const token = typeof raw === 'string' ? raw.trim() : '';
+  await authService.updateFcmToken(req.user.id, token);
 
   return ApiResponse.success(res, {
     message: 'FCM token updated',

@@ -32,6 +32,7 @@ router.put('/update-profile', authMiddleware, validate(authValidation.updateProf
 router.post('/change-password', authMiddleware, validate(authValidation.changePassword), authController.changePassword);
 router.post('/delete-account', authMiddleware, validate(authValidation.deleteAccount), authController.deleteAccount);
 router.post('/fcm-token', authMiddleware, validate(authValidation.fcmToken), authController.updateFcmToken);
+router.put('/fcm-token', authMiddleware, validate(authValidation.fcmToken), authController.updateFcmToken);
 
 module.exports = router;
 

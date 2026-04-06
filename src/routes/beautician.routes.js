@@ -1,7 +1,9 @@
 const express = require('express');
 const beauticianController = require('../controllers/beautician.controller');
+const authController = require('../controllers/auth.controller');
 const validate = require('../middlewares/requestValidator');
 const beauticianValidation = require('../validations/beautician.validation');
+const authValidation = require('../validations/auth.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { ROLES } = require('../utils/constants');
@@ -11,6 +13,10 @@ const router = express.Router();
 
 // All beautician routes require beautician role
 router.use(authMiddleware, roleMiddleware(ROLES.BEAUTICIAN));
+
+// Push: same handler as POST /auth/fcm-token (beautician JWT)
+router.post('/fcm-token', validate(authValidation.fcmToken), authController.updateFcmToken);
+router.put('/fcm-token', validate(authValidation.fcmToken), authController.updateFcmToken);
 
 router.get('/commission', beauticianController.getMyCommission);
 

@@ -1,7 +1,9 @@
 const express = require('express');
 const customerController = require('../controllers/customer.controller');
+const authController = require('../controllers/auth.controller');
 const validate = require('../middlewares/requestValidator');
 const customerValidation = require('../validations/customer.validation');
+const authValidation = require('../validations/auth.validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const roleMiddleware = require('../middlewares/roleMiddleware');
 const { ROLES } = require('../utils/constants');
@@ -10,6 +12,10 @@ const router = express.Router();
 
 // All customer routes require customer role
 router.use(authMiddleware, roleMiddleware(ROLES.CUSTOMER));
+
+// Push: same handler as POST /auth/fcm-token (customer JWT)
+router.post('/fcm-token', validate(authValidation.fcmToken), authController.updateFcmToken);
+router.put('/fcm-token', validate(authValidation.fcmToken), authController.updateFcmToken);
 
 // Banners & Categories (for home)
 router.get('/banners', customerController.getBanners);

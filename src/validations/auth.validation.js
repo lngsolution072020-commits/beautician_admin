@@ -57,8 +57,14 @@ const deleteAccount = {
 
 const fcmToken = {
   body: Joi.object({
-    token: Joi.string().min(10).required()
+    /** Device FCM registration token (either field name is accepted) */
+    token: Joi.string().trim().min(10).max(4096),
+    fcmToken: Joi.string().trim().min(10).max(4096)
   })
+    .or('token', 'fcmToken')
+    .messages({
+      'object.missing': 'Provide "token" or "fcmToken" (FCM registration string)'
+    })
 };
 
 const sendOtp = {

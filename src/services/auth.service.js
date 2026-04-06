@@ -231,11 +231,15 @@ const updateProfile = async (userId, payload) => {
   return user;
 };
 
-// Register FCM token for push notifications
+// Register FCM token for push notifications (stored on User; used by notification.service.sendFCM)
 const updateFcmToken = async (userId, token) => {
+  const t = typeof token === 'string' ? token.trim() : '';
+  if (t.length < 10) {
+    throw new ApiError(400, 'Invalid FCM token');
+  }
   const user = await User.findByIdAndUpdate(
     userId,
-    { fcmToken: token },
+    { fcmToken: t },
     { new: true }
   ).select('-password');
   if (!user) throw new ApiError(404, 'User not found');
