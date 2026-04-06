@@ -148,7 +148,8 @@ const createAppointment = async (customerId, payload) => {
     address,
     location: buildPoint(lat, lng),
     price,
-    paymentMode
+    paymentMode,
+    preferredBeautician: preferredBeauticianUserId
   });
 
   if (paymentMode === 'wallet') {
@@ -168,22 +169,24 @@ const createAppointment = async (customerId, payload) => {
     await profile.save();
   }
 
-  try {
-    await appointmentOfferService.assignInitialOffer(
-      appointment,
-      customerId,
-      preferredBeauticianUserId,
-      service.name
-    );
-    if (!appointment.beautician) {
-      logger.warn(
-        'No available beautician for booking %s (customer %s). Admin can assign manually.',
-        appointment._id,
-        customerId
+  if (paymentMode !== 'online' || price === 0) {
+    try {
+      await appointmentOfferService.assignInitialOffer(
+        appointment,
+        customerId,
+        preferredBeauticianUserId,
+        service.name
       );
+      if (!appointment.beautician) {
+        logger.warn(
+          'No available beautician for booking %s (customer %s). Admin can assign manually.',
+          appointment._id,
+          customerId
+        );
+      }
+    } catch (e) {
+      logger.warn('Auto-assign / notify beautician failed for booking %s: %s', appointment._id, e.message);
     }
-  } catch (e) {
-    logger.warn('Auto-assign / notify beautician failed for booking %s: %s', appointment._id, e.message);
   }
 
   return sanitizeAppointmentForResponse(appointment);
@@ -280,6 +283,17 @@ const cancelAppointment = async (customerId, id) => {
   appt.serviceStartOtpExpiresAt = null;
   appt.status = APPOINTMENT_STATUS.CANCELLED;
   await appt.save();
+
+  if (appt.paymentMode === 'wallet') {
+    await creditCustomerWallet(customerId, appt.price);
+  } else if (appt.paymentMode === 'online') {
+    const payment = await Payment.findOne({ appointment: id, status: PAYMENT_STATUS.PAID });
+    if (payment) {
+      await creditCustomerWallet(customerId, payment.amount);
+      payment.status = PAYMENT_STATUS.REFUNDED;
+      await payment.save();
+    }
+  }
   return sanitizeAppointmentForResponse(appt);
 };
 
@@ -724,6 +738,23 @@ const verifyPayment = async (customerId, { paymentId, providerPaymentId, provide
       await decrementInventoryForProductOrder(po);
       po.status = PRODUCT_ORDER_STATUS.CONFIRMED;
       await po.save();
+    }
+  }
+
+  if (payment.paymentType === 'appointment' && payment.appointment) {
+    const apptId = payment.appointment._id || payment.appointment;
+    const appt = await Appointment.findById(apptId).populate('service');
+    if (appt && appt.status === APPOINTMENT_STATUS.PENDING) {
+      try {
+        await appointmentOfferService.assignInitialOffer(
+          appt,
+          customerId,
+          appt.preferredBeautician,
+          appt.service.name
+        );
+      } catch (e) {
+        logger.warn('Auto-assign / notify beautician failed for booking %s: %s', apptId, e.message);
+      }
     }
   }
 

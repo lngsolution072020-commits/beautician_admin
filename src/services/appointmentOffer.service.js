@@ -1,5 +1,7 @@
 const Appointment = require('../models/Appointment');
 const Service = require('../models/Service');
+const Payment = require('../models/Payment');
+const CustomerProfile = require('../models/CustomerProfile');
 const logger = require('../config/logger');
 const { APPOINTMENT_STATUS } = require('../utils/constants');
 const notificationService = require('./notification.service');
@@ -112,6 +114,26 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
   appt.offerExpiresAt = null;
   appt.status = APPOINTMENT_STATUS.CANCELLED;
   await appt.save();
+
+  if (appt.paymentMode === 'wallet') {
+    const profile = await CustomerProfile.findOne({ user: customerId });
+    if (profile) {
+      profile.walletBalance = (profile.walletBalance || 0) + appt.price;
+      await profile.save();
+    }
+  } else if (appt.paymentMode === 'online') {
+    const { PAYMENT_STATUS } = require('../utils/constants');
+    const payment = await Payment.findOne({ appointment: appt._id, status: PAYMENT_STATUS.PAID });
+    if (payment) {
+      const profile = await CustomerProfile.findOne({ user: customerId });
+      if (profile) {
+        profile.walletBalance = (profile.walletBalance || 0) + payment.amount;
+        await profile.save();
+      }
+      payment.status = PAYMENT_STATUS.REFUNDED;
+      await payment.save();
+    }
+  }
   notificationService
     .sendFCM(customerId, {
       title: 'No beautician available',
