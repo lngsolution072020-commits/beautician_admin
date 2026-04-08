@@ -10,18 +10,9 @@ const { processExpiredOffers } = require('./src/services/appointmentOffer.servic
 
 const server = http.createServer(app);
 
-const allowedOrigins = [
-  'https://novabeautician.vercel.app',
-  'https://novaadmin-alpha.vercel.app',
-  'https://nova-rho-lemon.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175'
-];
-
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: env.allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   }
