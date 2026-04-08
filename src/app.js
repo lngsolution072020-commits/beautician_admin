@@ -10,14 +10,7 @@ const env = require('./config/env');
 const app = express();
 
 // Configure explicit allowed origins for secure credential support
-const allowedOrigins = [
-  'https://novabeautician.vercel.app',
-  'https://novaadmin-alpha.vercel.app',
-  'https://nova-rho-lemon.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175'
-];
+const allowedOrigins = env.allowedOrigins;
 
 // Manual CORS middleware to bypass any package configuration edge cases
 app.use((req, res, next) => {

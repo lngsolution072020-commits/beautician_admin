@@ -29,7 +29,16 @@ const env = {
     privateKey: process.env.FIREBASE_PRIVATE_KEY || '',
     databaseURL: process.env.FIREBASE_DATABASE_URL || ''
   },
-  logLevel: process.env.LOG_LEVEL || 'info'
+  logLevel: process.env.LOG_LEVEL || 'info',
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean) || [
+    'https://novabeautician.vercel.app',
+    'https://novaadmin-alpha.vercel.app',
+    'https://nova-rho-lemon.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://localhost:8080'
+  ]
 };
 
 module.exports = env;
