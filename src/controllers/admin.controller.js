@@ -523,3 +523,20 @@ exports.updateReferralSettings = catchAsync(async (req, res) => {
   });
 });
 
+// System Settings (super admin routes only)
+exports.getSystemSettings = catchAsync(async (req, res) => {
+  const data = await systemSettingsService.getSystemSettings();
+  return ApiResponse.success(res, {
+    message: 'System settings',
+    data
+  });
+});
+
+exports.updateSystemSettings = catchAsync(async (req, res) => {
+  const data = await systemSettingsService.updateSystemSettings(req.body);
+  return ApiResponse.success(res, {
+    message: 'System settings updated',
+    data
+  });
+});
+
