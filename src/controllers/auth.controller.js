@@ -164,6 +164,15 @@ exports.changePassword = catchAsync(async (req, res) => {
   });
 });
 
+exports.resetPassword = catchAsync(async (req, res) => {
+  await authService.resetPassword(req.body);
+
+  return ApiResponse.success(res, {
+    message: 'Password has been reset successfully',
+    data: {}
+  });
+});
+
 // Delete account (customer, soft-delete)
 exports.deleteAccount = catchAsync(async (req, res) => {
   await authService.deleteAccount(req.user.id, req.body);

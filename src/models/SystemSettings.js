@@ -6,6 +6,11 @@ const systemSettingsSchema = new mongoose.Schema(
       type: Number,
       required: true,
       default: 10
+    },
+    gstPercent: {
+      type: Number,
+      required: true,
+      default: 0
     }
   },
   {

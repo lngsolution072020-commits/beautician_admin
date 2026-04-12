@@ -156,6 +156,16 @@ const completeAppointment = async (beauticianId, id) => {
     APPOINTMENT_STATUS.COMPLETED,
     'completedAt'
   );
+
+  // Credit beautician wallet
+  const profile = await BeauticianProfile.findOne({ user: beauticianId });
+  if (profile) {
+    const commission = profile.platformCommissionPercent || 10;
+    const shareAmount = appt.price - (appt.price * commission) / 100;
+    profile.walletBalance = (profile.walletBalance || 0) + Math.round(shareAmount);
+    await profile.save();
+  }
+
   referralService.applyReferralRewardsOnAppointmentCompleted(appt._id).catch(() => {});
   return appt;
 };

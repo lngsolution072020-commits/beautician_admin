@@ -17,6 +17,7 @@ router.get('/referral-settings', authController.getPublicReferralSettings);
 router.get('/commission-settings', authController.getPublicCommissionSettings);
 router.post('/send-otp', validate(authValidation.sendOtp), authController.sendOtp);
 router.post('/verify-otp', validate(authValidation.verifyOtp), authController.verifyOtp);
+router.post('/reset-password', validate(authValidation.resetPassword), authController.resetPassword);
 router.post('/refresh-token', validate(authValidation.refreshToken), authController.refreshToken);
 
 // Authenticated routes

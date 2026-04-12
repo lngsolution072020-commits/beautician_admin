@@ -48,6 +48,11 @@ async function assignInitialOffer(appointmentDoc, customerId, preferredBeauticia
     const profile = await pickBeauticianForBooking(customerId, preferredBeauticianUserId, [], appointmentDoc.location);
     if (!profile?.user) {
       logger.warn('No available beautician for booking %s (customer %s).', appointmentDoc._id, customerId);
+      notificationService.sendFCM(customerId, {
+        title: 'Booking Received',
+        body: 'We have received your booking. We are currently looking for an available expert or an administrator will assign one shortly.',
+        data: { type: 'appointment_pending_manual', appointmentId: String(appointmentDoc._id) }
+      }).catch(() => {});
       return null;
     }
     appointmentDoc.beautician = profile.user._id;
@@ -110,37 +115,18 @@ async function passToNextBeautician(appointmentId, fromBeauticianUserId) {
   }
 
   appt.set('beautician', null);
-  appt.set('vendor', null);
   appt.offerExpiresAt = null;
-  appt.status = APPOINTMENT_STATUS.CANCELLED;
+  // Keep status as PENDING instead of CANCELLED
   await appt.save();
 
-  if (appt.paymentMode === 'wallet') {
-    const profile = await CustomerProfile.findOne({ user: customerId });
-    if (profile) {
-      profile.walletBalance = (profile.walletBalance || 0) + appt.price;
-      await profile.save();
-    }
-  } else if (appt.paymentMode === 'online') {
-    const { PAYMENT_STATUS } = require('../utils/constants');
-    const payment = await Payment.findOne({ appointment: appt._id, status: PAYMENT_STATUS.PAID });
-    if (payment) {
-      const profile = await CustomerProfile.findOne({ user: customerId });
-      if (profile) {
-        profile.walletBalance = (profile.walletBalance || 0) + payment.amount;
-        await profile.save();
-      }
-      payment.status = PAYMENT_STATUS.REFUNDED;
-      await payment.save();
-    }
-  }
   notificationService
     .sendFCM(customerId, {
-      title: 'No beautician available',
-      body: 'We could not connect you with an available beautician. Please try booking again.',
-      data: { type: 'appointment_unassigned', appointmentId: String(appt._id) }
+      title: 'Looking for experts',
+      body: 'Our experts are currently busy. Admin will manually assign a beautician for your booking shortly.',
+      data: { type: 'appointment_pending_manual', appointmentId: String(appt._id) }
     })
     .catch(() => {});
+  
   return { ok: true, cascaded: false };
 }
 

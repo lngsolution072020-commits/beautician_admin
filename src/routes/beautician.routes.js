@@ -68,5 +68,8 @@ router.post(
 
 router.get('/referral', beauticianController.getReferral);
 
+router.get('/bank-details', beauticianController.getBankDetails);
+router.put('/bank-details', beauticianController.updateBankDetails);
+
 module.exports = router;
 

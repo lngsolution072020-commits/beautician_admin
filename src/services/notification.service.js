@@ -28,7 +28,21 @@ function getFirebaseAdmin() {
   }
 }
 
-async function sendFCM(userId, { title, body, data = {} }) {
+async function sendFCM(userId, { title, body, data = {}, type = 'general' }) {
+  // Save to DB for persistence
+  try {
+    const Notification = require('../models/Notification');
+    await Notification.create({
+      user: userId,
+      type,
+      title,
+      message: body,
+      data
+    });
+  } catch (err) {
+    logger.warn('Failed to save notification to DB for user %s: %s', userId, err.message);
+  }
+
   const admin = getFirebaseAdmin();
   if (!admin) {
     logger.warn('FCM skipped: Firebase Admin not initialized (set GOOGLE_APPLICATION_CREDENTIALS). user=%s', userId);
@@ -43,7 +57,7 @@ async function sendFCM(userId, { title, body, data = {} }) {
     await admin.messaging().send({
       token: user.fcmToken,
       notification: { title, body },
-      data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]))
+      data: Object.fromEntries(Object.entries({ ...data, type: type || 'general' }).map(([k, v]) => [k, String(v)]))
     });
     return true;
   } catch (err) {

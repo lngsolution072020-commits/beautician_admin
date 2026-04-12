@@ -13,6 +13,8 @@ const Vendor = require('../models/Vendor');
 const razorpayService = require('./razorpay.service');
 const BeauticianProfile = require('../models/BeauticianProfile');
 const User = require('../models/User');
+const SystemSettings = require('../models/SystemSettings');
+const City = require('../models/City');
 const ApiError = require('../utils/apiError');
 const {
   ROLES,
@@ -21,7 +23,7 @@ const {
   PRODUCT_ORDER_STATUS
 } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
-const { buildPoint, getEtaBetweenPoints } = require('../utils/location');
+const { buildPoint, getEtaBetweenPoints, getDistanceInKm } = require('../utils/location');
 const appointmentRatingService = require('./appointmentRating.service');
 const appointmentOfferService = require('./appointmentOffer.service');
 
@@ -124,6 +126,10 @@ const createAppointment = async (customerId, payload) => {
     throw new ApiError(400, 'Invalid date/time for booking. Please select a valid date and time.');
   }
 
+  if (scheduledAt < new Date(Date.now() + 29 * 60 * 1000)) {
+    throw new ApiError(400, 'Bookings must be made at least 30 minutes in advance.');
+  }
+
   const pendingRatings = await appointmentRatingService.countPendingCustomerRatings(customerId);
   if (pendingRatings > 0) {
     throw new ApiError(
@@ -132,22 +138,56 @@ const createAppointment = async (customerId, payload) => {
     );
   }
 
+  const settings = await SystemSettings.findOne();
+  const gstPercent = settings?.gstPercent || 0;
+  const subTotal = Number(price);
+  const gstAmount = Math.round((subTotal * gstPercent) / 100 * 100) / 100;
+  const totalPrice = subTotal + gstAmount;
+
   if (paymentMode === 'wallet') {
     const profile = await CustomerProfile.findOne({ user: customerId });
     if (!profile) throw new ApiError(400, 'Customer profile not found');
     const bal = profile.walletBalance != null ? profile.walletBalance : 0;
-    if (bal < price) {
-      throw new ApiError(400, 'Insufficient wallet balance');
+    if (bal < totalPrice) {
+      throw new ApiError(400, `Insufficient wallet balance. Total amount with GST is ₹${totalPrice}`);
+    }
+  }
+
+  // Find nearest vendor based on city
+  let vendorId = payload.vendorId;
+  if (!vendorId && lat && lng) {
+    const cities = await City.find({ isActive: true }).lean();
+    let bestCity = null;
+    let bestDist = Infinity;
+    cities.forEach((c) => {
+      if (c.latitude && c.longitude) {
+        const d = getDistanceInKm({ coordinates: [c.longitude, c.latitude] }, { coordinates: [lng, lat] });
+        if (d != null && d < bestDist) {
+          bestDist = d;
+          bestCity = c;
+        }
+      }
+    });
+
+    if (bestCity && bestDist < 150) {
+      const vendor = await Vendor.findOne({ city: bestCity._id, isActive: true }).lean();
+      if (vendor) {
+        vendorId = vendor._id;
+      }
     }
   }
 
   const appointment = await Appointment.create({
     customer: customerId,
     service: serviceId,
+    vendor: vendorId,
     scheduledAt,
     address,
+    addressDetails: payload.addressDetails || {},
     location: buildPoint(lat, lng),
-    price,
+    subTotal,
+    gstAmount,
+    price: totalPrice,
     paymentMode,
     preferredBeautician: preferredBeauticianUserId
   });
@@ -160,32 +200,36 @@ const createAppointment = async (customerId, payload) => {
       throw new ApiError(400, 'Customer profile not found');
     }
     const bal = profile.walletBalance != null ? profile.walletBalance : 0;
-    if (bal < price) {
+    if (bal < totalPrice) {
       appointment.status = APPOINTMENT_STATUS.CANCELLED;
       await appointment.save();
       throw new ApiError(400, 'Insufficient wallet balance');
     }
-    profile.walletBalance = bal - price;
+    profile.walletBalance = bal - totalPrice;
     await profile.save();
   }
 
   if (paymentMode !== 'online' || price === 0) {
-    try {
-      await appointmentOfferService.assignInitialOffer(
-        appointment,
-        customerId,
-        preferredBeauticianUserId,
-        service.name
-      );
-      if (!appointment.beautician) {
-        logger.warn(
-          'No available beautician for booking %s (customer %s). Admin can assign manually.',
-          appointment._id,
-          customerId
+    if (!vendorId) {
+      try {
+        await appointmentOfferService.assignInitialOffer(
+          appointment,
+          customerId,
+          preferredBeauticianUserId,
+          service.name
         );
+        if (!appointment.beautician) {
+          logger.warn(
+            'No available beautician for booking %s (customer %s). Admin can assign manually.',
+            appointment._id,
+            customerId
+          );
+        }
+      } catch (e) {
+        logger.warn('Auto-assign / notify beautician failed for booking %s: %s', appointment._id, e.message);
       }
-    } catch (e) {
-      logger.warn('Auto-assign / notify beautician failed for booking %s: %s', appointment._id, e.message);
+    } else {
+      logger.info('Appointment %s assigned to vendor %s. Awaiting manual beautician assignment.', appointment._id, vendorId);
     }
   }
 
@@ -443,7 +487,12 @@ const createProductOrder = async (customerId, payload) => {
     });
   }
 
-  totalAmount = Math.round(totalAmount * 100) / 100;
+  const settings = await SystemSettings.findOne();
+  const gstPercent = settings?.gstPercent || 0;
+  const subTotal = Math.round(totalAmount * 100) / 100;
+  const gstAmount = Math.round((subTotal * gstPercent) / 100 * 100) / 100;
+  const finalTotal = subTotal + gstAmount;
+
   const addr = String(address || '').trim();
   if (addr.length < 5) throw new ApiError(400, 'Please enter a valid delivery address');
 
@@ -454,8 +503,8 @@ const createProductOrder = async (customerId, payload) => {
     const profile = await CustomerProfile.findOne({ user: customerId });
     if (!profile) throw new ApiError(400, 'Customer profile not found');
     const bal = profile.walletBalance != null ? profile.walletBalance : 0;
-    if (bal < totalAmount) throw new ApiError(400, 'Insufficient wallet balance');
-    profile.walletBalance = bal - totalAmount;
+    if (bal < finalTotal) throw new ApiError(400, `Insufficient wallet balance. Total with GST is ₹${finalTotal}`);
+    profile.walletBalance = bal - finalTotal;
     await profile.save();
     status = PRODUCT_ORDER_STATUS.CONFIRMED;
     await decrementInventoryForProductOrder({ items: lines });
@@ -473,7 +522,9 @@ const createProductOrder = async (customerId, payload) => {
       lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
         ? { type: 'Point', coordinates: [Number(lng), Number(lat)] }
         : undefined,
-    totalAmount,
+    subTotal,
+    gstAmount,
+    totalAmount: finalTotal,
     paymentMode,
     status
   });
@@ -484,7 +535,7 @@ const createProductOrder = async (customerId, payload) => {
       productOrder: order._id,
       appointment: null,
       customer: customerId,
-      amount: totalAmount,
+      amount: finalTotal,
       status: PAYMENT_STATUS.PAID
     });
   }
@@ -745,15 +796,19 @@ const verifyPayment = async (customerId, { paymentId, providerPaymentId, provide
     const apptId = payment.appointment._id || payment.appointment;
     const appt = await Appointment.findById(apptId).populate('service');
     if (appt && appt.status === APPOINTMENT_STATUS.PENDING) {
-      try {
-        await appointmentOfferService.assignInitialOffer(
-          appt,
-          customerId,
-          appt.preferredBeautician,
-          appt.service.name
-        );
-      } catch (e) {
-        logger.warn('Auto-assign / notify beautician failed for booking %s: %s', apptId, e.message);
+      if (!appt.vendor) {
+        try {
+          await appointmentOfferService.assignInitialOffer(
+            appt,
+            customerId,
+            appt.preferredBeautician,
+            appt.service.name
+          );
+        } catch (e) {
+          logger.warn('Auto-assign / notify beautician failed for booking %s: %s', apptId, e.message);
+        }
+      } else {
+        logger.info('Appointment %s has vendor %s. Awaiting manual assignment.', apptId, appt.vendor);
       }
     }
   }
@@ -764,14 +819,128 @@ const verifyPayment = async (customerId, { paymentId, providerPaymentId, provide
 
 const getInvoices = async (customerId, query) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = { customer: customerId, status: PAYMENT_STATUS.PAID };
 
-  const [items, total] = await Promise.all([
-    Payment.find(filter).populate('appointment').skip(skip).limit(limit).sort({ createdAt: -1 }),
-    Payment.countDocuments(filter)
+  const [appointments, productOrders] = await Promise.all([
+    Appointment.find({ customer: customerId, status: APPOINTMENT_STATUS.COMPLETED })
+      .populate('service beautician vendor')
+      .sort({ completedAt: -1 })
+      .lean(),
+    ProductOrder.find({
+      customer: customerId,
+      status: { $in: [PRODUCT_ORDER_STATUS.CONFIRMED, PRODUCT_ORDER_STATUS.PROCESSING, PRODUCT_ORDER_STATUS.SHIPPED, PRODUCT_ORDER_STATUS.DELIVERED] }
+    })
+      .populate('vendor')
+      .sort({ updatedAt: -1 })
+      .lean()
   ]);
 
-  return { items, meta: getMeta({ page, limit, total }) };
+  const items = [
+    ...appointments.map((a) => ({
+      _id: a._id,
+      invoiceNumber: `INV-S-${String(a._id).slice(-6).toUpperCase()}`,
+      type: 'service',
+      title: a.service?.name || 'Service',
+      date: a.completedAt || a.updatedAt || a.createdAt,
+      amount: a.price,
+      paymentMode: a.paymentMode,
+      status: 'completed',
+      vendorName: a.vendor?.name || 'Salon expert'
+    })),
+    ...productOrders.map((p) => ({
+      _id: p._id,
+      invoiceNumber: `INV-P-${String(p._id).slice(-6).toUpperCase()}`,
+      type: 'product',
+      title: 'Product Order',
+      date: p.updatedAt || p.createdAt,
+      amount: p.totalAmount,
+      paymentMode: p.paymentMode,
+      status: p.status,
+      vendorName: p.vendor?.name || 'Store'
+    }))
+  ];
+
+  items.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const paginatedItems = items.slice(skip, skip + limit);
+  return { items: paginatedItems, meta: getMeta({ page, limit, total: items.length }) };
+};
+
+const getInvoiceById = async (customerId, id) => {
+  // Appointment check
+  const appt = await Appointment.findOne({ _id: id, customer: customerId })
+    .populate('service beautician vendor customer')
+    .lean();
+
+  if (appt && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+    return {
+      _id: appt._id,
+      invoiceNumber: `INV-S-${String(appt._id).slice(-6).toUpperCase()}`,
+      type: 'service',
+      date: appt.completedAt || appt.updatedAt,
+      customer: {
+        name: appt.customer?.name,
+        email: appt.customer?.email,
+        phone: appt.customer?.phone,
+        address: appt.address
+      },
+      vendor: {
+        name: appt.vendor?.name || 'Antigravity Salon',
+        address: appt.vendor?.address || '',
+        phone: appt.vendor?.phone || ''
+      },
+      items: [
+        {
+          name: appt.service?.name || 'Salon Service',
+          quantity: 1,
+          price: appt.subTotal || appt.price,
+          total: appt.subTotal || appt.price
+        }
+      ],
+      subTotal: appt.subTotal || appt.price,
+      gstAmount: appt.gstAmount || 0,
+      total: appt.price,
+      paymentMode: appt.paymentMode,
+      status: 'PAID'
+    };
+  }
+
+  // Product order check
+  const order = await ProductOrder.findOne({ _id: id, customer: customerId })
+    .populate('vendor customer')
+    .lean();
+
+  if (order && order.status !== PRODUCT_ORDER_STATUS.CANCELLED && order.status !== PRODUCT_ORDER_STATUS.PENDING_PAYMENT) {
+    return {
+      _id: order._id,
+      invoiceNumber: `INV-P-${String(order._id).slice(-6).toUpperCase()}`,
+      type: 'product',
+      date: order.updatedAt,
+      customer: {
+        name: order.customer?.name,
+        email: order.customer?.email,
+        phone: order.customer?.phone,
+        address: order.address
+      },
+      vendor: {
+        name: order.vendor?.name || 'Antigravity Store',
+        address: order.vendor?.address || '',
+        phone: order.vendor?.phone || ''
+      },
+      items: order.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        price: i.unitPrice,
+        total: i.lineTotal
+      })),
+      subTotal: order.subTotal || order.totalAmount,
+      gstAmount: order.gstAmount || 0,
+      total: order.totalAmount,
+      paymentMode: order.paymentMode,
+      status: order.paymentMode === 'cod' ? 'PENDING' : 'PAID'
+    };
+  }
+
+  throw new ApiError(404, 'Invoice not found or not ready');
 };
 
 const getBeauticianSummaryForCustomer = async (customerId, beauticianUserId) => {
@@ -852,6 +1021,13 @@ const submitCustomerRating = async (customerId, appointmentId, { stars, comment 
   return sanitizeAppointmentForResponse(appt);
 };
 
+const getSettings = async () => {
+  const settings = await SystemSettings.findOne().lean();
+  return {
+    gstPercent: settings?.gstPercent || 0
+  };
+};
+
 module.exports = {
   getBanners,
   getCategories,
@@ -874,6 +1050,8 @@ module.exports = {
   initiatePayment,
   initiateWalletRecharge,
   verifyPayment,
-  getInvoices
+  getInvoices,
+  getInvoiceById,
+  getSettings
 };
 

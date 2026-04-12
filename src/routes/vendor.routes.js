@@ -14,12 +14,14 @@ router.use(authMiddleware, roleMiddleware(ROLES.VENDOR));
 // Beauticians
 router.post('/beauticians', validate(vendorValidation.createBeautician), vendorController.createBeautician);
 router.get('/beauticians', validate(vendorValidation.getBeauticians), vendorController.getBeauticians);
+router.get('/city-users', vendorController.getCityUsers);
 router.put('/beauticians/:id', validate(vendorValidation.updateBeautician), vendorController.updateBeautician);
 router.delete('/beauticians/:id', validate(vendorValidation.beauticianIdParam), vendorController.deleteBeautician);
 
 // Appointments
 router.get('/appointments', validate(vendorValidation.getAppointments), vendorController.getAppointments);
 router.get('/appointments/:id', validate(vendorValidation.appointmentIdParam), vendorController.getAppointmentById);
+router.put('/appointments/:id/assign-beautician', validate(vendorValidation.assignBeautician), vendorController.assignBeautician);
 
 // Inventory
 router.post('/inventory', validate(vendorValidation.createInventory), vendorController.createInventoryItem);

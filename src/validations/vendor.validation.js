@@ -10,7 +10,8 @@ const createBeautician = {
     password: Joi.string().min(6).max(50).required(),
     phone: Joi.string().optional(),
     expertise: Joi.array().items(Joi.string()).optional(),
-    experienceYears: Joi.number().integer().min(0).optional()
+    experienceYears: Joi.number().integer().min(0).optional(),
+    salaryType: Joi.string().valid('salaried', 'commission').optional()
   })
 };
 
@@ -33,7 +34,8 @@ const updateBeautician = {
   body: Joi.object({
     expertise: Joi.array().items(Joi.string()).optional(),
     experienceYears: Joi.number().integer().min(0).optional(),
-    isAvailable: Joi.boolean().optional()
+    isAvailable: Joi.boolean().optional(),
+    salaryType: Joi.string().valid('salaried', 'commission').optional()
   })
 };
 
@@ -49,6 +51,13 @@ const getAppointments = {
 const appointmentIdParam = {
   params: Joi.object({
     id: objectId().required()
+  })
+};
+
+const assignBeautician = {
+  ...appointmentIdParam,
+  body: Joi.object({
+    beauticianId: objectId().required()
   })
 };
 
@@ -113,6 +122,7 @@ module.exports = {
   updateBeautician,
   getAppointments,
   appointmentIdParam,
+  assignBeautician,
   createInventory,
   getInventory,
   inventoryIdParam,

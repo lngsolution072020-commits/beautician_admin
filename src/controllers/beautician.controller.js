@@ -261,3 +261,23 @@ exports.getMyCommission = catchAsync(async (req, res) => {
   });
 });
 
+exports.getBankDetails = catchAsync(async (req, res) => {
+  const profile = await BeauticianProfile.findOne({ user: req.user.id }).select('bankDetails');
+  return ApiResponse.success(res, {
+    message: 'Bank details',
+    data: profile?.bankDetails || {}
+  });
+});
+
+exports.updateBankDetails = catchAsync(async (req, res) => {
+  const profile = await BeauticianProfile.findOneAndUpdate(
+    { user: req.user.id },
+    { bankDetails: req.body },
+    { new: true, runValidators: true }
+  );
+  return ApiResponse.success(res, {
+    message: 'Bank details updated',
+    data: profile.bankDetails
+  });
+});
+

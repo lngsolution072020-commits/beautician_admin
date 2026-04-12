@@ -67,7 +67,9 @@ router.post(
   customerController.initiateWalletRecharge
 );
 router.get('/invoices', validate(customerValidation.getInvoices), customerController.getInvoices);
+router.get('/invoices/:id', customerController.getInvoiceById);
 
+router.get('/settings', customerController.getSettings);
 router.get('/referral', customerController.getReferral);
 
 module.exports = router;

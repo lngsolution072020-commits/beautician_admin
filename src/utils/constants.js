@@ -2,6 +2,7 @@
 
 const ROLES = {
   SUPER_ADMIN: 'super_admin',
+  SUB_ADMIN: 'sub_admin',
   VENDOR: 'vendor',
   BEAUTICIAN: 'beautician',
   CUSTOMER: 'customer'

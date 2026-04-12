@@ -22,6 +22,11 @@ const beauticianProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    salaryType: {
+      type: String,
+      enum: ['salaried', 'commission'],
+      default: 'commission'
+    },
     rating: {
       type: Number,
       min: 0,
@@ -70,6 +75,12 @@ const beauticianProfileSchema = new mongoose.Schema(
       min: 0,
       max: 100,
       default: 10
+    },
+    bankDetails: {
+      accountHolderName: { type: String, trim: true },
+      accountNumber: { type: String, trim: true },
+      ifscCode: { type: String, trim: true },
+      upiId: { type: String, trim: true }
     }
   },
   {

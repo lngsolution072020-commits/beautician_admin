@@ -34,6 +34,12 @@ const appointmentSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    addressDetails: {
+      building: String,
+      floor: String,
+      landmark: String,
+      originalAddress: String // The autocomplete string from Google
+    },
     location: {
       type: {
         type: String,
@@ -53,6 +59,16 @@ const appointmentSchema = new mongoose.Schema(
     notes: {
       type: String,
       trim: true
+    },
+    subTotal: {
+      type: Number,
+      required: true,
+      default: 0
+    },
+    gstAmount: {
+      type: Number,
+      required: true,
+      default: 0
     },
     price: {
       type: Number,

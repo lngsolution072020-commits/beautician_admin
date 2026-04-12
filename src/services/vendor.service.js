@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const Inventory = require('../models/Inventory');
 const Payment = require('../models/Payment');
+const Vendor = require('../models/Vendor');
 const ApiError = require('../utils/apiError');
 const { ROLES } = require('../utils/constants');
 const { getPagination, getMeta } = require('../utils/pagination');
@@ -16,7 +17,7 @@ const assertVendorAccess = (resourceVendorId, currentVendorId) => {
 
 // Beauticians
 const createBeautician = async (currentVendorId, payload) => {
-  const { name, email, password, phone, expertise, experienceYears } = payload;
+  const { name, email, password, phone, expertise, experienceYears, salaryType } = payload;
 
   const existing = await User.findOne({ email });
   if (existing) {
@@ -36,13 +37,37 @@ const createBeautician = async (currentVendorId, payload) => {
     user: user.id,
     vendor: currentVendorId,
     expertise,
-    experienceYears
+    experienceYears,
+    salaryType
   });
 
   user.beauticianProfile = beauticianProfile.id;
   await user.save();
 
   return { user, beauticianProfile };
+};
+
+const getCityUsers = async (currentVendorId, query) => {
+  const { page, limit, skip } = getPagination(query);
+  const vendor = await Vendor.findById(currentVendorId).lean();
+  if (!vendor) throw new ApiError(404, 'Vendor not found');
+
+  const filter = { city: vendor.city, role: ROLES.CUSTOMER };
+
+  if (query.search) {
+    filter.$or = [
+      { name: { $regex: query.search, $options: 'i' } },
+      { email: { $regex: query.search, $options: 'i' } },
+      { phone: { $regex: query.search, $options: 'i' } }
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    User.find(filter).select('-password').skip(skip).limit(limit).sort({ createdAt: -1 }),
+    User.countDocuments(filter)
+  ]);
+
+  return { items, meta: getMeta({ page, limit, total }) };
 };
 
 const getBeauticians = async (currentVendorId, query) => {
@@ -121,6 +146,44 @@ const getAppointmentById = async (currentVendorId, id) => {
   const appt = await Appointment.findById(id).populate('customer beautician service');
   if (!appt) throw new ApiError(404, 'Appointment not found');
   assertVendorAccess(appt.vendor, currentVendorId);
+  return appt;
+};
+
+const assignBeautician = async (currentVendorId, appointmentId, beauticianUserId) => {
+  const appt = await Appointment.findById(appointmentId);
+  if (!appt) throw new ApiError(404, 'Appointment not found');
+  assertVendorAccess(appt.vendor, currentVendorId);
+
+  if (appt.status !== 'pending') {
+    throw new ApiError(400, 'Only pending appointments can be assigned');
+  }
+
+  const beautician = await User.findOne({ _id: beauticianUserId, role: ROLES.BEAUTICIAN });
+  if (!beautician) throw new ApiError(404, 'Beautician not found');
+
+  // Verify beautician belongs to this vendor
+  const profile = await BeauticianProfile.findOne({ user: beauticianUserId });
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+  assertVendorAccess(profile.vendor, currentVendorId);
+
+  appt.beautician = beauticianUserId;
+  appt.status = 'accepted'; // Directly accept if vendor assigns? Or keep pending? 
+  // User said "vendor uske end se beautician select kr de" - usually this means it's assigned and ready.
+  // In the current flow, 'accepted' means a beautician has it.
+  
+  await appt.save();
+
+  // Trigger notification to beautician
+  const notificationService = require('./notification.service');
+  await notificationService.sendNotification(beauticianUserId, {
+    title: 'New Assignment',
+    body: `You have been assigned to a new booking at ${appt.address}`,
+    data: {
+      type: 'appointment_assigned',
+      appointmentId: appt._id.toString()
+    }
+  });
+
   return appt;
 };
 
@@ -205,10 +268,12 @@ const getReports = async (currentVendorId, query) => {
 module.exports = {
   createBeautician,
   getBeauticians,
+  getCityUsers,
   updateBeautician,
   deleteBeautician,
   getAppointments,
   getAppointmentById,
+  assignBeautician,
   createInventoryItem,
   getInventory,
   updateInventoryItem,

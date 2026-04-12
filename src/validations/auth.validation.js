@@ -90,6 +90,14 @@ const detectCityQuery = {
   })
 };
 
+const resetPassword = {
+  body: Joi.object({
+    phone: Joi.string().min(10).max(15).required(),
+    otp: Joi.string().length(6).pattern(/^\d+$/).required(),
+    newPassword: Joi.string().min(6).max(50).required()
+  })
+};
+
 module.exports = {
   register,
   registerBeautician,
@@ -97,6 +105,7 @@ module.exports = {
   refreshToken,
   updateProfile,
   changePassword,
+  resetPassword,
   deleteAccount,
   fcmToken,
   sendOtp,

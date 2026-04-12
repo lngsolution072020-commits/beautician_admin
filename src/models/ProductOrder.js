@@ -50,6 +50,16 @@ const productOrderSchema = new mongoose.Schema(
         default: undefined
       }
     },
+    subTotal: {
+      type: Number,
+      required: true,
+      default: 0
+    },
+    gstAmount: {
+      type: Number,
+      required: true,
+      default: 0
+    },
     totalAmount: {
       type: Number,
       required: true,

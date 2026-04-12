@@ -390,7 +390,7 @@ exports.getAppointmentById = catchAsync(async (req, res) => {
 });
 
 exports.updateAppointment = catchAsync(async (req, res) => {
-  const appointment = await adminService.updateAppointment(req.params.id, req.body);
+  const appointment = await adminService.updateAppointment(req.params.id, req.body, req.vendorScope);
   return ApiResponse.success(res, {
     message: 'Appointment updated',
     data: appointment
@@ -411,6 +411,62 @@ exports.getReports = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'Reports data',
     data: reports
+  });
+});
+
+exports.getInvoice = catchAsync(async (req, res) => {
+  const invoice = await adminService.getInvoice(req.params.id, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Invoice fetched',
+    data: invoice
+  });
+});
+
+exports.getVendorFinancials = catchAsync(async (req, res) => {
+  const financials = await adminService.getVendorFinancials(req.params.id, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Vendor financials fetched',
+    data: financials
+  });
+});
+
+exports.getBeauticianFinancials = catchAsync(async (req, res) => {
+  const financials = await adminService.getBeauticianFinancials(req.params.id, req.query, req.vendorScope);
+  return ApiResponse.success(res, {
+    message: 'Beautician financials fetched',
+    data: financials
+  });
+});
+
+// Sub-Admin management
+exports.getSubAdmins = catchAsync(async (req, res) => {
+  const result = await adminService.getSubAdmins(req.query);
+  return ApiResponse.success(res, {
+    message: 'Sub-admins fetched',
+    data: result
+  });
+});
+
+exports.createSubAdmin = catchAsync(async (req, res) => {
+  const subAdmin = await adminService.createSubAdmin(req.body);
+  return ApiResponse.success(res, {
+    message: 'Sub-admin created',
+    data: subAdmin
+  });
+});
+
+exports.updateSubAdmin = catchAsync(async (req, res) => {
+  const subAdmin = await adminService.updateSubAdmin(req.params.id, req.body);
+  return ApiResponse.success(res, {
+    message: 'Sub-admin updated',
+    data: subAdmin
+  });
+});
+
+exports.deleteSubAdmin = catchAsync(async (req, res) => {
+  await adminService.deleteSubAdmin(req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Sub-admin deleted'
   });
 });
 

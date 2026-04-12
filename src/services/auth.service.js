@@ -203,7 +203,19 @@ const getProfile = async (userId) => {
   }
   if (user.role === ROLES.BEAUTICIAN) {
     const referralCode = await referralService.ensureReferralCodeForUser(userId);
-    return { ...user, referralCode };
+    const bp = await BeauticianProfile.findOne({ user: userId }).lean();
+    const totalJobs = await Appointment.countDocuments({ beautician: userId, status: APPOINTMENT_STATUS.COMPLETED });
+    const completedApts = await Appointment.find({ beautician: userId, status: APPOINTMENT_STATUS.COMPLETED }).select('price').lean();
+    const totalEarnings = completedApts.reduce((acc, apt) => acc + (apt.price || 0), 0);
+
+    return { 
+      ...user, 
+      referralCode,
+      totalEarnings,
+      walletBalance: bp?.walletBalance || 0,
+      rating: bp?.rating || 4.5,
+      totalJobs
+    };
   }
   return user;
 };
@@ -430,6 +442,44 @@ const detectCityByLatLng = async (lat, lng) => {
   return { city: best, distanceKm: bestD };
 };
 
+const resetPassword = async ({ phone, otp, newPassword }) => {
+  const normalized = normalizePhone(phone);
+  const stored = otpStore.get(normalized);
+  if (!stored) {
+    throw new ApiError(400, 'OTP expired or not sent');
+  }
+  if (stored.expiresAt < Date.now()) {
+    otpStore.delete(normalized);
+    throw new ApiError(400, 'OTP expired');
+  }
+  if (stored.otp !== otp) {
+    throw new ApiError(401, 'Invalid OTP');
+  }
+
+  const phoneVariants = [
+    normalized,
+    `+91${normalized}`,
+    `91${normalized}`,
+    `0${normalized}`,
+    normalized.replace(/^0+/, '')
+  ].filter(Boolean);
+
+  const user = await User.findOne({
+    phone: { $in: phoneVariants },
+    isActive: true
+  });
+
+  if (!user) {
+    throw new ApiError(404, 'User not found with this mobile number');
+  }
+
+  user.password = newPassword;
+  await user.save();
+  otpStore.delete(normalized);
+
+  return true;
+};
+
 module.exports = {
   register,
   registerBeautician,
@@ -440,6 +490,7 @@ module.exports = {
   setProfileImage,
   updateProfile,
   changePassword,
+  resetPassword,
   deleteAccount,
   updateFcmToken,
   sendOtp,

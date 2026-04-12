@@ -230,6 +230,14 @@ exports.initiatePayment = catchAsync(async (req, res) => {
   });
 });
 
+exports.getSettings = catchAsync(async (req, res) => {
+  const settings = await customerService.getSettings();
+  return ApiResponse.success(res, {
+    message: 'Settings fetched',
+    data: settings
+  });
+});
+
 exports.verifyPayment = catchAsync(async (req, res) => {
   const payment = await customerService.verifyPayment(req.user.id, req.body);
   return ApiResponse.success(res, {
@@ -251,6 +259,14 @@ exports.getInvoices = catchAsync(async (req, res) => {
   return ApiResponse.success(res, {
     message: 'Invoices fetched',
     data: { items, meta }
+  });
+});
+
+exports.getInvoiceById = catchAsync(async (req, res) => {
+  const data = await customerService.getInvoiceById(req.user.id, req.params.id);
+  return ApiResponse.success(res, {
+    message: 'Invoice details',
+    data
   });
 });
 

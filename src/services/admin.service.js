@@ -1356,11 +1356,12 @@ const getAppointmentById = async (id, vendorScope) => {
 };
 
 const updateAppointment = async (id, payload, vendorScope) => {
-  if (vendorScope) {
-    throw new ApiError(403, 'Forbidden');
-  }
   const appointment = await Appointment.findById(id);
   if (!appointment) throw new ApiError(404, 'Appointment not found');
+
+  if (vendorScope && (!appointment.vendor || String(appointment.vendor) !== String(vendorScope.vendorId))) {
+    throw new ApiError(403, 'Forbidden: appointment does not belong to your salon');
+  }
 
   const previousBeauticianId = appointment.beautician ? appointment.beautician.toString() : null;
 
@@ -1546,6 +1547,317 @@ const updateAdminProductOrderStatus = async (id, status, vendorScope) => {
   return order;
 };
 
+const getInvoice = async (id, vendorScope) => {
+  // 1. Try Service Appointment
+  const appt = await Appointment.findById(id)
+    .populate('service beautician vendor customer')
+    .lean();
+
+  if (appt) {
+    if (vendorScope && String(appt.vendor) !== String(vendorScope.vendorId)) {
+      throw new ApiError(403, 'Forbidden');
+    }
+
+    return {
+      _id: appt._id,
+      invoiceNumber: `INV-S-${String(appt._id).slice(-6).toUpperCase()}`,
+      type: 'service',
+      date: appt.completedAt || appt.updatedAt || appt.createdAt,
+      customer: {
+        name: appt.customer?.name,
+        email: appt.customer?.email,
+        phone: appt.customer?.phone,
+        address: appt.address
+      },
+      vendor: {
+        name: appt.vendor?.name || 'Nova Beauty Salon',
+        address: appt.vendor?.address || '',
+        phone: appt.vendor?.phone || ''
+      },
+      items: [
+        {
+          name: appt.service?.name || 'Salon Service',
+          quantity: 1,
+          price: appt.subTotal || appt.price,
+          total: appt.subTotal || appt.price
+        }
+      ],
+      subTotal: appt.subTotal || appt.price,
+      gstAmount: appt.gstAmount || 0,
+      total: appt.price,
+      paymentMode: appt.paymentMode,
+      status: appt.status === APPOINTMENT_STATUS.COMPLETED ? 'PAID' : appt.status.toUpperCase()
+    };
+  }
+
+  // 2. Try Product Order
+  const order = await ProductOrder.findById(id)
+    .populate('vendor customer')
+    .lean();
+
+  if (order) {
+    if (vendorScope && String(order.vendor) !== String(vendorScope.vendorId)) {
+      throw new ApiError(403, 'Forbidden');
+    }
+
+    return {
+      _id: order._id,
+      invoiceNumber: `INV-P-${String(order._id).slice(-6).toUpperCase()}`,
+      type: 'product',
+      date: order.updatedAt || order.createdAt,
+      customer: {
+        name: order.customer?.name,
+        email: order.customer?.email,
+        phone: order.customer?.phone,
+        address: order.address
+      },
+      vendor: {
+        name: order.vendor?.name || 'Nova Beauty Store',
+        address: order.vendor?.address || '',
+        phone: order.vendor?.phone || ''
+      },
+      items: (order.items || []).map((i) => ({
+        name: i.name || 'Product',
+        quantity: i.quantity || 1,
+        price: i.unitPrice || 0,
+        total: i.lineTotal || 0
+      })),
+      subTotal: order.subTotal || order.totalAmount,
+      gstAmount: order.gstAmount || 0,
+      total: order.totalAmount,
+      paymentMode: order.paymentMode,
+      status: order.paymentMode === 'online' && order.status !== PRODUCT_ORDER_STATUS.PENDING_PAYMENT ? 'PAID' : order.status.toUpperCase()
+    };
+  }
+
+  throw new ApiError(404, 'Invoice not found');
+};
+
+const getVendorFinancials = async (vendorId, vendorScope) => {
+  if (vendorScope && String(vendorId) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  const vendor = await Vendor.findById(vendorId).lean();
+  if (!vendor) throw new ApiError(404, 'Vendor not found');
+
+  const vendorCommissionPercent = vendor.platformCommissionPercent || 0;
+
+  // Fetch all completed and paid appointments
+  const appointments = await Appointment.find({
+    vendor: vendorId,
+    status: APPOINTMENT_STATUS.COMPLETED
+  }).populate('customer service beautician').lean();
+
+  let totalRevenue = 0;
+  let totalAdminCommission = 0;
+  let totalVendorEarnings = 0;
+  let totalBeauticianEarnings = 0;
+
+  const transactions = appointments.map((appt) => {
+    const revenue = appt.price || 0;
+    // 1. Admin Commission (Platform Fee) - typically set in Beautician Profile
+    // But since we want report for Vendor, we use a default or fetch beautician profiles
+    // For simplicity in this report, let's assume beautician profile commission is the "Platform Fee"
+    // Wait, let's just use the totals.
+    totalRevenue += revenue;
+    
+    // In completeAppointment, admin fee is taken first.
+    // Let's assume 10% if not found.
+    const adminCommissionPercent = 10; 
+    const adminFee = (revenue * adminCommissionPercent) / 100;
+    const beauticianRawEarnings = revenue - adminFee;
+    
+    // Vendor gets a % of beauticianRawEarnings
+    const vendorShare = (beauticianRawEarnings * vendorCommissionPercent) / 100;
+    const beauticianFinalEarnings = beauticianRawEarnings - vendorShare;
+
+    totalAdminCommission += adminFee;
+    totalVendorEarnings += vendorShare;
+    totalBeauticianEarnings += beauticianFinalEarnings;
+
+    return {
+      id: appt._id,
+      date: appt.completedAt || appt.updatedAt,
+      customer: appt.customer?.name || 'Customer',
+      service: appt.service?.name || 'Service',
+      beautician: appt.beautician?.name || 'Beautician',
+      revenue,
+      adminFee,
+      vendorShare,
+      beauticianFinalEarnings
+    };
+  });
+
+  return {
+    vendor: {
+      id: vendor._id,
+      name: vendor.name,
+      commissionPercent: vendorCommissionPercent
+    },
+    summary: {
+      totalRevenue,
+      totalAdminCommission,
+      totalVendorEarnings,
+      totalBeauticianEarnings,
+      appointmentCount: appointments.length
+    },
+    transactions: transactions.sort((a, b) => new Date(b.date) - new Date(a.date))
+  };
+};
+
+const getDateFilter = (range) => {
+  const now = new Date();
+  const filter = {};
+  if (range === 'day') {
+    filter.completedAt = { $gte: new Date(now.setHours(0, 0, 0, 0)) };
+  } else if (range === 'week') {
+    const diff = now.getDate() - now.getDay();
+    filter.completedAt = { $gte: new Date(now.setDate(diff)) };
+  } else if (range === 'month') {
+    filter.completedAt = { $gte: new Date(now.getFullYear(), now.getMonth(), 1) };
+  } else if (range === 'year') {
+    filter.completedAt = { $gte: new Date(now.getFullYear(), 0, 1) };
+  }
+  return filter;
+};
+
+const getBeauticianFinancials = async (beauticianId, query = {}, vendorScope) => {
+  const { range = 'all' } = query;
+  
+  const beautician = await User.findById(beauticianId).lean();
+  if (!beautician) throw new ApiError(404, 'Beautician not found');
+  
+  const profile = await BeauticianProfile.findOne({ user: beauticianId }).lean();
+  if (!profile) throw new ApiError(404, 'Beautician profile not found');
+  
+  if (vendorScope && String(profile.vendor) !== String(vendorScope.vendorId)) {
+    throw new ApiError(403, 'Forbidden');
+  }
+
+  const adminCommissionPercent = profile.platformCommissionPercent || 10;
+  
+  let vendorCommissionPercent = 0;
+  if (profile.vendor) {
+    const vendor = await Vendor.findById(profile.vendor).lean();
+    if (vendor) vendorCommissionPercent = vendor.platformCommissionPercent || 0;
+  }
+
+  const dateFilter = getDateFilter(range);
+  const filter = {
+    beautician: beauticianId,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    ...dateFilter
+  };
+
+  const appointments = await Appointment.find(filter)
+    .populate('customer service')
+    .lean();
+
+  let totalRevenue = 0;
+  let totalAdminCommission = 0;
+  let totalVendorEarnings = 0;
+  let totalBeauticianEarnings = 0;
+
+  const transactions = appointments.map((appt) => {
+    const revenue = appt.price || 0;
+    const adminFee = (revenue * adminCommissionPercent) / 100;
+    const beauticianRawEarnings = revenue - adminFee;
+    const vendorShare = (beauticianRawEarnings * vendorCommissionPercent) / 100;
+    const beauticianFinalEarnings = beauticianRawEarnings - vendorShare;
+
+    totalRevenue += revenue;
+    totalAdminCommission += adminFee;
+    totalVendorEarnings += vendorShare;
+    totalBeauticianEarnings += beauticianFinalEarnings;
+
+    return {
+      id: appt._id,
+      date: appt.completedAt || appt.updatedAt,
+      customer: appt.customer?.name || 'Customer',
+      service: appt.service?.name || 'Service',
+      revenue,
+      adminFee,
+      vendorShare,
+      beauticianFinalEarnings
+    };
+  });
+
+  return {
+    beautician: {
+      id: beautician._id,
+      name: beautician.name,
+      adminCommissionPercent,
+      vendorCommissionPercent
+    },
+    summary: {
+      totalRevenue,
+      totalAdminCommission,
+      totalVendorEarnings,
+      totalBeauticianEarnings,
+      appointmentCount: appointments.length
+    },
+    transactions: transactions.sort((a, b) => new Date(b.date) - new Date(a.date))
+  };
+};
+
+const getSubAdmins = async (query) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter = { role: ROLES.SUB_ADMIN };
+  if (query.search) {
+    filter.$or = [
+      { name: { $regex: query.search, $options: 'i' } },
+      { email: { $regex: query.search, $options: 'i' } }
+    ];
+  }
+  const [items, total] = await Promise.all([
+    User.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }),
+    User.countDocuments(filter)
+  ]);
+  return { items, meta: getMeta({ page, limit, total }) };
+};
+
+const createSubAdmin = async (payload) => {
+  const { password, ...rest } = payload;
+  const email = rest.email.toLowerCase().trim();
+  const existing = await User.findOne({ email });
+  if (existing) throw new ApiError(400, 'Email already in use');
+
+  const pwd = password && password.length >= 6 ? password : `SubAdmin${Math.floor(1000 + Math.random() * 9000)}`;
+
+  return User.create({
+    ...rest,
+    email,
+    password: pwd,
+    role: ROLES.SUB_ADMIN
+  });
+};
+
+const updateSubAdmin = async (id, payload) => {
+  const { email, password, role, ...rest } = payload;
+  const user = await User.findOne({ _id: id, role: ROLES.SUB_ADMIN });
+  if (!user) throw new ApiError(404, 'Sub-admin not found');
+
+  if (email && email.toLowerCase().trim() !== user.email) {
+    const emailExist = await User.findOne({ email: email.toLowerCase().trim() });
+    if (emailExist) throw new ApiError(400, 'Email already in use');
+    user.email = email.toLowerCase().trim();
+  }
+
+  if (password && password.length >= 6) user.password = password;
+  
+  // Update other fields including permissions
+  Object.assign(user, rest);
+  await user.save();
+  return user;
+};
+
+const deleteSubAdmin = async (id) => {
+  const user = await User.findOneAndDelete({ _id: id, role: ROLES.SUB_ADMIN });
+  if (!user) throw new ApiError(404, 'Sub-admin not found');
+  return true;
+};
+
 module.exports = {
   createCity,
   getCities,
@@ -1588,6 +1900,13 @@ module.exports = {
   updateAdminInventoryItem,
   deleteAdminInventoryItem,
   getAdminProductOrders,
-  updateAdminProductOrderStatus
+  updateAdminProductOrderStatus,
+  getInvoice,
+  getVendorFinancials,
+  getBeauticianFinancials,
+  getSubAdmins,
+  createSubAdmin,
+  updateSubAdmin,
+  deleteSubAdmin
 };
 

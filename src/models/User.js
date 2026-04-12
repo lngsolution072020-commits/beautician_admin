@@ -74,7 +74,12 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
-    }
+    },
+    /** List of permissions for sub_admin. Example: ['dashboard_view', 'vendors_edit'] */
+    permissions: [{
+      type: String,
+      trim: true
+    }]
   },
   {
     timestamps: true

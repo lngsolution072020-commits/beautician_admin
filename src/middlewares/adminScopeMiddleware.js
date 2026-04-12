@@ -5,7 +5,7 @@ const { ROLES } = require('../utils/constants');
 /** After auth + role (super_admin | vendor), attach city/vendor scope for vendor users */
 const attachVendorScope = async (req, res, next) => {
   try {
-    if (req.user.role === ROLES.SUPER_ADMIN) {
+    if (req.user.role === ROLES.SUPER_ADMIN || req.user.role === ROLES.SUB_ADMIN) {
       req.vendorScope = null;
       return next();
     }

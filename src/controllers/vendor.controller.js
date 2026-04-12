@@ -20,6 +20,14 @@ exports.getBeauticians = catchAsync(async (req, res) => {
   });
 });
 
+exports.getCityUsers = catchAsync(async (req, res) => {
+  const { items, meta } = await vendorService.getCityUsers(req.user.vendor, req.query);
+  return ApiResponse.success(res, {
+    message: 'City users fetched',
+    data: { items, meta }
+  });
+});
+
 exports.updateBeautician = catchAsync(async (req, res) => {
   const profile = await vendorService.updateBeautician(req.user.vendor, req.params.id, req.body);
   return ApiResponse.success(res, {
@@ -49,6 +57,19 @@ exports.getAppointmentById = catchAsync(async (req, res) => {
   const appt = await vendorService.getAppointmentById(req.user.vendor, req.params.id);
   return ApiResponse.success(res, {
     message: 'Appointment fetched',
+    data: appt
+  });
+});
+
+exports.assignBeautician = catchAsync(async (req, res) => {
+  const { beauticianId } = req.body;
+  const appt = await vendorService.assignBeautician(
+    req.user.vendor,
+    req.params.id,
+    beauticianId
+  );
+  return ApiResponse.success(res, {
+    message: 'Beautician assigned successfully',
     data: appt
   });
 });
