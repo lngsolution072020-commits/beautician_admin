@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const withdrawalController = require('../controllers/withdrawal.controller');
-const { protect, restrictTo } = require('../middleware/auth');
+const authMiddleware = require('../middlewares/authMiddleware');
+const roleMiddleware = require('../middlewares/roleMiddleware');
+const { ROLES } = require('../utils/constants');
 
 // Beautician routes
-router.post('/request', protect, restrictTo('beautician'), withdrawalController.createRequest);
-router.get('/my', protect, restrictTo('beautician'), withdrawalController.getMyWithdrawals);
+router.post('/request', authMiddleware, roleMiddleware(ROLES.BEAUTICIAN), withdrawalController.createRequest);
+router.get('/my', authMiddleware, roleMiddleware(ROLES.BEAUTICIAN), withdrawalController.getMyWithdrawals);
 
 // Admin routes
-router.get('/admin/all', protect, restrictTo('admin'), withdrawalController.getAllRequests);
-router.patch('/admin/:id/status', protect, restrictTo('admin'), withdrawalController.updateStatus);
+router.get('/admin/all', authMiddleware, roleMiddleware(ROLES.SUPER_ADMIN), withdrawalController.getAllRequests);
+router.patch('/admin/:id/status', authMiddleware, roleMiddleware(ROLES.SUPER_ADMIN), withdrawalController.updateStatus);
 
 module.exports = router;
